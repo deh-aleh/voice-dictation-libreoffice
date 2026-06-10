@@ -1,0 +1,17 @@
+# Artefatti di build
+/dist/
+
+# Dipendenze e modello bundlati (pesanti / specifici per piattaforma): si rigenerano
+src/pythonpath/*
+!src/pythonpath/.gitkeep
+src/model/*
+!src/model/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db

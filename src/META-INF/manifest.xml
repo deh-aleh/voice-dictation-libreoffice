@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  manifest.xml - Dichiara a LibreOffice quali file dell'archivio .oxt devono essere
+  registrati e con quale ruolo (media-type).
+
+  NB: description.xml NON va elencato qui (viene letto automaticamente).
+  Vanno elencati: il componente Python, e i file di configurazione .xcu.
+-->
+<manifest:manifest xmlns:manifest="http://openoffice.org/2001/manifest">
+
+  <!-- Componente UNO scritto in Python (il ProtocolHandler che gestisce il click). -->
+  <manifest:file-entry
+      manifest:media-type="application/vnd.sun.star.uno-component;type=Python"
+      manifest:full-path="dettatura.py"/>
+
+  <!-- Definizione del pulsante in toolbar. -->
+  <manifest:file-entry
+      manifest:media-type="application/vnd.sun.star.configuration-data"
+      manifest:full-path="Addons.xcu"/>
+
+  <!-- Mappa il protocollo personalizzato (vnd.libreitalia.dettatura:*) al nostro componente. -->
+  <manifest:file-entry
+      manifest:media-type="application/vnd.sun.star.configuration-data"
+      manifest:full-path="ProtocolHandler.xcu"/>
+
+</manifest:manifest>

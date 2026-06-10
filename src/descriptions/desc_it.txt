@@ -1,0 +1,1 @@
+Dettatura vocale offline per LibreOffice Writer basata su Vosk. Riconoscimento in tempo reale in lingua italiana, interamente locale (nessun dato inviato in rete). Inserisce il testo riconosciuto direttamente alla posizione del cursore.

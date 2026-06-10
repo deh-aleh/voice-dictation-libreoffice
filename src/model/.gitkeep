@@ -1,0 +1,4 @@
+# Il modello acustico Vosk per l'italiano viene scaricato qui da scripts/fetch_model.sh.
+# Atteso: il CONTENUTO del modello (cartella am/, conf/, graph/, ...) direttamente
+# in questa cartella `model/`, non una sottocartella.
+# Contenuto ignorato da git (troppo pesante): si rigenera in fase di build.

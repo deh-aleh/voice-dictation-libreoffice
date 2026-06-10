@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ProtocolHandler.xcu - Registra un gestore di protocollo personalizzato.
+
+  Quando l'utente clicca il pulsante in toolbar, LibreOffice genera un dispatch
+  verso l'URL "vnd.libreitalia.dettatura:toggle". Questo file dice a LO:
+  "tutti gli URL che iniziano con vnd.libreitalia.dettatura: vanno gestiti
+   dal componente con questo ImplementationName".
+
+  L'ImplementationName DEVE coincidere con quello registrato in dettatura.py.
+-->
+<oor:component-data xmlns:oor="http://openoffice.org/2001/registry"
+                    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                    oor:name="ProtocolHandler"
+                    oor:package="org.openoffice.Office">
+  <node oor:name="HandlerSet">
+    <node oor:name="org.libreitalia.dettaturavocale.ProtocolHandler"
+          oor:op="replace">
+      <prop oor:name="Protocols" oor:type="oor:string-list">
+        <value>vnd.libreitalia.dettatura:*</value>
+      </prop>
+    </node>
+  </node>
+</oor:component-data>

@@ -1,0 +1,1 @@
+Offline voice dictation for LibreOffice Writer powered by Vosk. Real-time Italian speech recognition, fully local (no data leaves your machine). Inserts recognized text directly at the cursor position.

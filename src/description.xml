@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  description.xml - Metadati dell'estensione LibreOffice (.oxt)
+  L'identificatore deve essere univoco e coerente con:
+    - ProtocolHandler.xcu (registrazione del protocollo)
+    - il lookup PackageInformationProvider nel codice Python (per trovare il modello Vosk)
+-->
+<description xmlns="http://openoffice.org/extensions/description/2006"
+             xmlns:xlink="http://www.w3.org/1999/xlink"
+             xmlns:dep="http://openoffice.org/extensions/description/2006">
+
+  <!-- ID univoco del pacchetto. Usato a runtime per localizzare la cartella dell'estensione. -->
+  <identifier value="org.libreitalia.dettaturavocale"/>
+
+  <!-- Versione dell'estensione (semver). -->
+  <version value="0.1.0"/>
+
+  <!-- Versione minima di LibreOffice. 7.0 garantisce Python 3 + pyuno moderni. -->
+  <dependencies>
+    <OpenOffice.org-minimal-version value="7.0"
+        dep:name="LibreOffice 7.0"
+        xmlns="http://openoffice.org/extensions/description/2006"/>
+  </dependencies>
+
+  <!-- Piattaforme supportate. Vosk/sounddevice sono binari nativi: dichiarare le piattaforme
+       per cui si distribuiscono effettivamente i .so/.dll bundlati. "all" e' ammesso solo se
+       si includono i binari per ogni OS (vedi docs/ARCHITETTURA.md). -->
+  <platform value="all"/>
+
+  <display-name>
+    <name lang="it">Dettatura Vocale (Vosk - Italiano)</name>
+    <name lang="en">Voice Dictation (Vosk - Italian)</name>
+  </display-name>
+
+  <publisher>
+    <name xlink:href="https://github.com/IL_TUO_USERNAME/dettatura-vocale-libreoffice"
+          lang="it">Progetto Dettatura Vocale</name>
+  </publisher>
+
+  <extension-description>
+    <src xlink:href="descriptions/desc_it.txt" lang="it"/>
+    <src xlink:href="descriptions/desc_en.txt" lang="en"/>
+  </extension-description>
+
+  <icon>
+    <default xlink:href="icons/extension_icon.png"/>
+  </icon>
+
+</description>
