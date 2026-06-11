@@ -45,6 +45,21 @@
               <value>com.sun.star.text.TextDocument</value>
             </prop>
           </node>
+          <node oor:name="m2" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>vnd.libreitalia.dettatura:openlog</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="it">Apri cartella dei log</value>
+              <value xml:lang="en">Open log folder</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument</value>
+            </prop>
+          </node>
         </node>
       </node>
     </node>

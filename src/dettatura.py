@@ -178,6 +178,38 @@ def _stub_dipendenze_opzionali():
         log("stub envwrap registrato")
 
 
+def _diagnostica_ambiente():
+    """Logga info utili a capire i problemi di caricamento native (Windows in primis)."""
+    try:
+        log("--- DIAGNOSTICA ---")
+        log("platform=%s machine=%s" % (sys.platform, getattr(os, "uname", lambda: "?")() if hasattr(os, "uname") else "?"))
+        log("python=%s" % sys.version.replace("\n", " "))
+        log("pythonpath bundle=%s" % _PYTHONPATH)
+        if os.path.isdir(_PYTHONPATH):
+            voci = sorted(os.listdir(_PYTHONPATH))
+            backend = [v for v in voci if v.startswith("_cffi_backend")]
+            log("_cffi_backend presenti: %s" % backend)
+            log("_sounddevice_data presente: %s" % os.path.isdir(os.path.join(_PYTHONPATH, "_sounddevice_data")))
+            voskdir = os.path.join(_PYTHONPATH, "vosk")
+            if os.path.isdir(voskdir):
+                native = [v for v in os.listdir(voskdir) if v.lower().endswith((".dll", ".so", ".dylib"))]
+                log("native in vosk/: %s" % native)
+        # Su Windows le DLL dipendenti (libvosk -> libstdc++/libgcc/winpthread)
+        # vanno rese trovabili: aggiungo le cartelle al search path delle DLL.
+        if sys.platform.startswith("win") and hasattr(os, "add_dll_directory"):
+            for sub in ("", "vosk"):
+                d = os.path.join(_PYTHONPATH, sub) if sub else _PYTHONPATH
+                if os.path.isdir(d):
+                    try:
+                        os.add_dll_directory(d)
+                        log("add_dll_directory: %s" % d)
+                    except Exception:
+                        log("add_dll_directory fallita per %s" % d)
+        log("--- FINE DIAGNOSTICA ---")
+    except Exception:
+        log("diagnostica fallita:\n" + traceback.format_exc())
+
+
 # ===========================================================================
 # Motore di riconoscimento: Vosk + acquisizione audio nel suo thread.
 # ===========================================================================
@@ -222,11 +254,28 @@ class MotoreDettatura:
 
     def _ciclo(self):
         try:
-            log("thread dettatura: avvio, import vosk/sounddevice...")
+            log("thread dettatura: avvio")
+            _diagnostica_ambiente()
             _stub_dipendenze_opzionali()
-            from vosk import Model, KaldiRecognizer
-            import sounddevice as sd
-            log("import OK")
+
+            # Import separati: se fallisce, il log dice ESATTAMENTE quale.
+            try:
+                from vosk import Model, KaldiRecognizer
+                log("import vosk OK")
+            except Exception:
+                log("ERRORE import vosk:\n" + traceback.format_exc())
+                raise
+            try:
+                import sounddevice as sd
+                log("import sounddevice OK")
+            except Exception:
+                log("ERRORE import sounddevice (PortAudio?):\n" + traceback.format_exc())
+                raise
+            try:
+                log("device audio: %s" % repr(sd.query_devices()))
+                log("default input: %s" % repr(sd.default.device))
+            except Exception:
+                log("query device fallita (microfono?):\n" + traceback.format_exc())
 
             if not os.path.isdir(self._model_path):
                 log("ERRORE: modello Vosk non trovato in: %s" % self._model_path)
@@ -312,12 +361,35 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         log("dispatch: %s" % url.Complete)
         if not url.Complete.startswith(PROTOCOL):
             return
+        # L'azione e' la parte dopo il protocollo: "toggle" oppure "openlog".
+        azione = url.Complete[len(PROTOCOL):]
         try:
-            self._toggle()
+            if azione == "openlog":
+                self._apri_cartella_log()
+            else:
+                self._toggle()
         except Exception:
             tb = traceback.format_exc()
             log("ECCEZIONE in dispatch:\n" + tb)
             self._messaggio("Errore:\n" + tb)
+
+    def _apri_cartella_log(self):
+        """Apre la cartella che contiene il file di log nel file manager di sistema."""
+        cartella = os.path.dirname(LOG_PATH)
+        log("apro cartella log: %s" % cartella)
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(cartella)  # noqa: stesso effetto di doppio click
+            elif sys.platform == "darwin":
+                import subprocess
+                subprocess.Popen(["open", cartella])
+            else:
+                import subprocess
+                subprocess.Popen(["xdg-open", cartella])
+        except Exception:
+            log("apertura cartella fallita:\n" + traceback.format_exc())
+        # In ogni caso mostro all'utente il percorso esatto del log.
+        self._messaggio("Cartella dei log:\n%s\n\nFile di log:\n%s" % (cartella, LOG_PATH))
 
     def addStatusListener(self, listener, url):
         # La toolbar registra qui un listener per conoscere lo stato del comando.

@@ -10,3 +10,6 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Knowledge graph locale (graphify) - non versionato
+/graphify-out/
