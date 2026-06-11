@@ -1,0 +1,63 @@
+name: Build & Release OXT
+
+# Build di tutte le .oxt su tag v* (es. git tag v0.2.0 && git push --tags).
+# workflow_dispatch permette anche un run manuale dalla tab Actions (senza release).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Ogni OS builda le proprie wheel native (impossibile da una sola macchina).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux_x86_64
+          - os: windows-latest
+            platform: windows_x86_64
+          - os: macos-latest          # macos-latest = Apple Silicon (arm64)
+            platform: macos_aarch64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'   # il python del build e' irrilevante: i _cffi_backend
+                                   # di TUTTE le minor 3.9-3.14 vengono scaricati a parte
+
+      - name: Deps native + _cffi_backend multi-versione
+        shell: bash
+        run: bash scripts/fetch_deps.sh ${{ matrix.platform }}
+
+      - name: Build oxt (it + en)
+        shell: bash
+        run: |
+          for L in it en; do
+            bash scripts/fetch_model.sh "$L"
+            bash scripts/build_oxt.sh "$L" ${{ matrix.platform }}
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oxt-${{ matrix.platform }}
+          path: dist/*.oxt
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # serve a creare la GitHub Release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true   # unisce gli artifact dei 3 OS in dist/
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.oxt
+          generate_release_notes: true

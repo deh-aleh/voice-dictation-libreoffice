@@ -1,28 +1,29 @@
-# Dettatura Vocale per LibreOffice Writer (Vosk · Italiano · Offline)
+# Dettatura Vocale per LibreOffice Writer (Vosk · Offline · IT/EN)
 
 Estensione `.oxt` per **LibreOffice Writer** che aggiunge la **dettatura vocale in
-tempo reale**, interamente **offline**, in **lingua italiana**, tramite il motore
+tempo reale**, interamente **offline**, tramite il motore
 [Vosk](https://alphacephei.com/vosk/).
 
 Premi un pulsante in toolbar → parla → il testo riconosciuto compare alla
 posizione del cursore. Nessun dato lascia il tuo computer.
 
-> ⚠️ **Stato: prototipo / scaffold iniziale (v0.1.0).** Lo scheletro completo
-> (configurazione UNO + componente Python) è pronto. Il bundling dei binari nativi
-> multipiattaforma è la parte ancora aperta — vedi
-> [docs/STATO_PROGETTO.md](docs/STATO_PROGETTO.md).
+Disponibile in **Italiano** ed **Inglese**: si pubblica un `.oxt` per lingua e per
+piattaforma (le due lingue possono anche coesistere installate insieme).
 
 ---
 
 ## Caratteristiche
 
 - 🔒 **100% offline** — privacy totale, nessuna connessione richiesta.
-- 🇮🇹 **Italiano** — modello acustico Vosk `small-it` (~50 MB), pensato per lo streaming.
-- 🧩 **Architettura "all-in-one"** — dipendenze Python e modello bundlati nell'`.oxt`,
-  caricati dal Python interno di LibreOffice (nessun `pip` lato utente).
+- 🌍 **IT / EN** — modelli Vosk `small` (~50 MB), pensati per lo streaming.
+- 🧩 **All-in-one** — dipendenze Python e modello bundlati nell'`.oxt`, caricati
+  dal Python interno di LibreOffice (nessun `pip` lato utente).
+- 🐍 **Robusto sulle versioni Python** — un `_cffi_backend` per ogni minor 3.9–3.14:
+  lo stesso oxt gira su LibreOffice con Python diversi (vedi
+  [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) §3).
 - 🖱️ **Un pulsante** in toolbar: *Inizia/Ferma Dettatura*.
+- 🔁 **Coesistenza it/en** con mutua esclusione: non ascoltano il microfono insieme.
 - ⚡ **UI non bloccante** — l'audio gira in un thread separato.
-- ✍️ **Inserimento al cursore** tramite API UNO (view-cursor di Writer).
 
 ---
 
@@ -32,70 +33,79 @@ posizione del cursore. Nessun dato lascia il tuo computer.
 dettatura-vocale-libreoffice/
 ├── README.md
 ├── LICENSE                     # MIT
-├── Makefile                    # make deps | model | oxt | all | clean
-├── .gitignore
+├── Makefile                    # build locale: make all LANG=it PLATFORM=linux_x86_64
+├── .github/workflows/
+│   └── release.yml             # CI: matrice 3 OS × 2 lingue -> 6 oxt su tag v*
 ├── docs/
 │   ├── ARCHITETTURA.md         # come LO carica librerie native dall'oxt
-│   └── STATO_PROGETTO.md       # a che punto siamo / roadmap
+│   ├── STATO_PROGETTO.md       # a che punto siamo / roadmap
+│   └── STORICO.md              # cosa fa il programma, passo per passo
 ├── scripts/
-│   ├── fetch_deps.sh           # pip install --target src/pythonpath
-│   ├── fetch_model.sh          # scarica il modello Vosk IT in src/model
-│   └── build_oxt.sh            # zippa src/ -> dist/dettatura-vocale.oxt
+│   ├── fetch_deps.sh <plat>    # deps native + _cffi_backend 3.9-3.14 -> build/deps/
+│   ├── fetch_model.sh <lang>   # scarica il modello Vosk -> build/models/<lang>/
+│   ├── build_oxt.sh <lang> <plat>  # staging + zip -> dist/voice-dictation-<lang>-<plat>.oxt
+│   └── _pack.py                # sostituzioni (coesistenza/token) + zip portabile
+├── build/                      # [build] deps, modelli, staging (non versionato)
+├── dist/                       # [build] gli .oxt prodotti (non versionato)
 └── src/                        # <-- diventa la RADICE dell'archivio .oxt
-    ├── description.xml         # metadati estensione
+    ├── description.xml         # metadati estensione (@PLATFORM@, @MODEL_LANG_*@)
     ├── Addons.xcu              # pulsante in toolbar
     ├── ProtocolHandler.xcu     # instrada il click -> componente Python
-    ├── dettatura.py            # componente UNO + motore Vosk
-    ├── META-INF/
-    │   └── manifest.xml        # registra componente e .xcu
+    ├── dettatura.py            # componente UNO + motore Vosk + lockfile
+    ├── META-INF/manifest.xml   # registra componente e .xcu
     ├── descriptions/           # testi mostrati nel Gestore Estensioni
-    ├── icons/                  # mic_16.png, mic_26.png, extension_icon.png
-    ├── pythonpath/             # [build] vosk, sounddevice, ... (auto su sys.path)
-    └── model/                  # [build] modello acustico Vosk italiano
+    └── icons/                  # mic_16.png, mic_26.png, extension_icon.png
 ```
 
-`pythonpath/` e `model/` sono popolati in fase di build e **non** versionati
-(`.gitignore`): si rigenerano con `make deps` e `make model`.
+`build/` e `dist/` si rigenerano e **non** sono versionati (`.gitignore`).
 
 ---
 
 ## Build
 
-Prerequisiti: `bash`, `python3` + `pip`, `curl`, `unzip`, `zip`.
+Prerequisiti: `bash`, `python3` + `pip`, `curl`. (Niente `zip`/`unzip`: lo zip lo
+fa Python, per portabilità su Windows/macOS.)
+
+### Locale (una combinazione lingua/piattaforma)
 
 ```bash
-# 1. dipendenze Python -> src/pythonpath/
-make deps
-
-# 2. modello Vosk italiano -> src/model/
-make model
-
-# 3. pacchetto installabile -> dist/dettatura-vocale.oxt
-make oxt
-
-# (oppure tutto in una volta)
-make all
+make all LANG=it PLATFORM=linux_x86_64   # -> dist/voice-dictation-it-linux_x86_64.oxt
+make oxt LANG=en                         # riusa deps/model già scaricati
 ```
 
-> ⚠️ `make deps` scarica wheel native (vosk, PortAudio via sounddevice) **valide
-> solo per l'OS/architettura su cui lo esegui**. Per un `.oxt` multipiattaforma
-> vedi [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).
+Variabili: `LANG=it|en` (default `it`), `PLATFORM=linux_x86_64|windows_x86_64|macos_aarch64`
+(default `linux_x86_64`).
+
+### Tutte le piattaforme (release, via GitHub Actions)
+
+Le wheel native vanno costruite **su ciascun OS**: impossibile da una sola
+macchina. Ci pensa la CI. Basta un tag:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+Il workflow builda su `ubuntu`/`windows`/`macos`, per `it` ed `en`, e allega le
+**6 oxt** a una GitHub Release.
 
 ---
 
 ## Installazione (utente finale)
 
-1. Scarica `dettatura-vocale.oxt`.
+1. Scarica l'`.oxt` della tua lingua/piattaforma (es. `voice-dictation-it-linux_x86_64.oxt`).
 2. LibreOffice → **Strumenti → Gestione estensioni → Aggiungi…** → seleziona l'`.oxt`.
 3. Riavvia LibreOffice.
 4. Apri Writer: comparirà il pulsante **Inizia/Ferma Dettatura** in toolbar.
+
+Puoi installare IT ed EN insieme: avrai due pulsanti, ma uno solo può ascoltare
+alla volta.
 
 ---
 
 ## Uso
 
 1. Posiziona il cursore dove vuoi scrivere.
-2. Clicca **Inizia Dettatura** e parla in italiano.
+2. Clicca **Inizia Dettatura** e parla.
 3. Il testo appare in tempo reale.
 4. Clicca di nuovo per fermare.
 
@@ -104,14 +114,15 @@ make all
 ## Come funziona (in breve)
 
 ```
-[Click pulsante] --Addons.xcu--> URL "vnd.libreitalia.dettatura:toggle"
+[Click pulsante] --Addons.xcu--> URL "vnd.libreitalia.dettatura.<lang>:toggle"
        --ProtocolHandler.xcu--> DettaturaHandler.dispatch() (dettatura.py)
+       --> lockfile: una sola lingua/finestra ascolta alla volta
        --> thread audio: sounddevice -> Vosk -> testo
        --> UNO: insertString(view_cursor, testo)
 ```
 
-Dettaglio tecnico completo del caricamento dei binari nativi dall'`.oxt`:
-[docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).
+Dettaglio tecnico completo: [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).
+Cosa fa il programma passo per passo: [docs/STORICO.md](docs/STORICO.md).
 
 ---
 

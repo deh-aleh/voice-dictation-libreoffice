@@ -3,34 +3,44 @@
 dettatura.py - Componente UNO (ProtocolHandler) per la dettatura vocale offline
                in LibreOffice Writer tramite Vosk.
 
-Flusso generale:
-    1. L'utente clicca il pulsante in toolbar (Addons.xcu).
-    2. LibreOffice traduce il click in un dispatch verso l'URL
-       "vnd.libreitalia.dettatura:toggle".
-    3. ProtocolHandler.xcu instrada quell'URL a questo componente.
-    4. dispatch() avvia/ferma un thread di ascolto audio.
-    5. Il thread riconosce il parlato con Vosk e inserisce il testo
-       al cursore di Writer tramite l'API UNO.
+Flusso:
+    1. Click sul pulsante (Addons.xcu) -> URL "vnd.libreitalia.dettatura:toggle".
+    2. ProtocolHandler.xcu instrada l'URL a questo componente.
+    3. dispatch() avvia/ferma un thread di ascolto audio.
+    4. Il thread riconosce il parlato con Vosk e inserisce il testo al cursore.
 
-Best practice adottate:
-    - Componente UNO registrato via unohelper.ImplementationHelper.
-    - L'audio gira in un thread separato: la UI di LO NON si blocca mai.
-    - Le dipendenze native (vosk, sounddevice) sono caricate da <oxt>/pythonpath,
-      che LibreOffice aggiunge automaticamente a sys.path per i componenti Python
-      di un'estensione.
-    - Il modello Vosk viene localizzato a runtime via PackageInformationProvider,
-      cosi' funziona indipendentemente da dove l'utente ha installato l'estensione.
+Feedback visivo:
+    Il pulsante e' un "toggle": quando la dettatura e' attiva LibreOffice lo
+    mostra PREMUTO/evidenziato. Lo stato e' notificato agli XStatusListener della
+    toolbar tramite FeatureStateEvent.State (True = in ascolto).
+
+Diagnostica:
+    Tutto viene loggato in <tmp>/dettatura_libreoffice.log, cosi' e' possibile
+    capire se il componente viene caricato e se il click arriva, anche quando la
+    UI non mostra nulla. Percorso tipico: /tmp/dettatura_libreoffice.log
 """
 
 import os
 import sys
 import json
 import queue
+import tempfile
 import threading
 import traceback
+import datetime
 
 import uno
 import unohelper
+
+# ---------------------------------------------------------------------------
+# Priorita' alle dipendenze bundlate nell'estensione.
+# LibreOffice aggiunge <oxt>/pythonpath in CODA a sys.path: cosi' eventuali
+# pacchetti di sistema (es. un tqdm rotto in /usr/lib/.../site-packages)
+# verrebbero caricati al posto dei nostri. Inserendolo in TESTA, il nostro
+# bundle self-consistent vince sempre.
+_PYTHONPATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pythonpath")
+if os.path.isdir(_PYTHONPATH) and sys.path[0:1] != [_PYTHONPATH]:
+    sys.path.insert(0, _PYTHONPATH)
 
 from com.sun.star.frame import XDispatchProvider, XDispatch
 from com.sun.star.lang import XServiceInfo, XInitialization
@@ -47,22 +57,142 @@ EXTENSION_ID = "org.libreitalia.dettaturavocale"
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 8000
 
+# File di log per la diagnostica.
+LOG_PATH = os.path.join(tempfile.gettempdir(), "dettatura_libreoffice.log")
+
+
+def log(msg):
+    """Scrive una riga timestampata nel file di log (best-effort)."""
+    try:
+        ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write("[%s] %s\n" % (ts, msg))
+    except Exception:
+        pass
+
+
+# Traccia gia' il semplice caricamento del modulo: se questa riga non compare
+# nel log, il componente Python non viene proprio caricato da LibreOffice.
+log("=== modulo dettatura.py caricato (pid %s) ===" % os.getpid())
+
+
+# ---------------------------------------------------------------------------
+# Mutua esclusione tra le estensioni di lingua diversa (it, en, ...).
+# Possono coesistere INSTALLATE, ma NON devono ascoltare il microfono insieme.
+# Usiamo un lockfile dal nome FISSO (non per-lingua): cosi' l'estensione IT
+# "vede" il lock di quella EN e viceversa. Contiene PID e identifier del titolare.
+# ---------------------------------------------------------------------------
+LOCK_PATH = os.path.join(tempfile.gettempdir(), "voice-dictation.lock")
+
+
+def _pid_vivo(pid):
+    """True se il processo con questo PID e' ancora in esecuzione."""
+    if pid <= 0:
+        return False
+    if sys.platform.startswith("win"):
+        # Su Windows os.kill(pid, 0) puo' TERMINARE il processo: evitarlo.
+        try:
+            import ctypes
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            h = ctypes.windll.kernel32.OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if h:
+                ctypes.windll.kernel32.CloseHandle(h)
+                return True
+            return False
+        except Exception:
+            return True  # in dubbio, considero vivo (non rubo il lock)
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError as e:
+        import errno
+        return e.errno == errno.EPERM  # esiste ma non ho i permessi
+
+
+def _leggi_lock():
+    """Ritorna (pid, identifier) del lock, o (None, None) se assente/illeggibile."""
+    try:
+        with open(LOCK_PATH, "r", encoding="utf-8") as f:
+            pid = int(f.readline().strip())
+            ident = f.readline().strip()
+        return pid, ident
+    except Exception:
+        return None, None
+
+
+def _acquisisci_lock():
+    """Prova a prendere il lock. False se un'altra istanza VIVA lo detiene."""
+    try:
+        if os.path.exists(LOCK_PATH):
+            pid, ident = _leggi_lock()
+            if pid and _pid_vivo(pid):
+                # Occupato, a meno che non siamo noi stessi (stesso pid+identifier).
+                if not (pid == os.getpid() and ident == EXTENSION_ID):
+                    log("lock occupato da pid=%s ident=%s" % (pid, ident))
+                    return False
+            # altrimenti lock stantio (processo morto): lo sovrascrivo
+        with open(LOCK_PATH, "w", encoding="utf-8") as f:
+            f.write("%d\n%s\n" % (os.getpid(), EXTENSION_ID))
+        return True
+    except Exception:
+        log("lock: errore acquisizione:\n" + traceback.format_exc())
+        return True  # non bloccare l'uso per un errore di I/O
+
+
+def _rilascia_lock():
+    """Rimuove il lock solo se e' nostro (stesso pid+identifier). Idempotente."""
+    try:
+        if not os.path.exists(LOCK_PATH):
+            return
+        pid, ident = _leggi_lock()
+        if pid == os.getpid() and ident == EXTENSION_ID:
+            os.remove(LOCK_PATH)
+    except Exception:
+        log("lock: errore rilascio:\n" + traceback.format_exc())
+
+
+def _stub_dipendenze_opzionali():
+    """Neutralizza dipendenze opzionali che si rompono sotto il loader UNO.
+
+    vosk importa tqdm, che fa:
+        try: from envwrap import envwrap
+        except ModuleNotFoundError: pass
+    L'import hook di LibreOffice (uno.py) pero' rilancia ImportError (classe
+    base) invece di ModuleNotFoundError, quindi il guard di tqdm non scatta e
+    l'import esplode. Registriamo uno stub 'envwrap' in sys.modules cosi'
+    l'import riesce sempre. tqdm non ci serve: vosk lo usa solo per la barra di
+    avanzamento del download del modello (che noi bundliamo gia')."""
+    import types as _types
+    if "envwrap" not in sys.modules:
+        m = _types.ModuleType("envwrap")
+
+        def envwrap(prefix, types=None, is_method=False, **_kw):
+            # Decoratore identita': lascia la funzione invariata.
+            def deco(fn):
+                return fn
+            return deco
+
+        m.envwrap = envwrap
+        sys.modules["envwrap"] = m
+        log("stub envwrap registrato")
+
 
 # ===========================================================================
-# Motore di riconoscimento: incapsula Vosk + acquisizione audio nel suo thread.
+# Motore di riconoscimento: Vosk + acquisizione audio nel suo thread.
 # ===========================================================================
 class MotoreDettatura:
-    """Gestisce il ciclo di vita dell'ascolto audio e del riconoscimento.
+    """Gestisce ascolto audio e riconoscimento in un thread separato.
 
-    L'inserimento del testo nel documento avviene tramite la callback
-    `inserisci_testo`, fornita dal chiamante, cosi' il motore resta
-    disaccoppiato dall'API UNO.
+    Disaccoppiato da UNO: il testo riconosciuto viene passato alla callback
+    `inserisci_testo`. Quando il thread termina (stop o errore) invoca
+    `on_stop` cosi' il chiamante puo' aggiornare lo stato del pulsante.
     """
 
-    def __init__(self, model_path, inserisci_testo, logga=print):
+    def __init__(self, model_path, inserisci_testo, on_stop=None):
         self._model_path = model_path
         self._inserisci_testo = inserisci_testo
-        self._logga = logga
+        self._on_stop = on_stop
 
         self._thread = None
         self._stop_event = threading.Event()
@@ -80,75 +210,82 @@ class MotoreDettatura:
         self._thread.start()
 
     def ferma(self):
+        # Non si fa join(): siamo nel thread della UI e non vogliamo bloccarla.
         self._stop_event.set()
-        # Non si fa join() qui: siamo nel thread della UI e non vogliamo bloccarla.
         self._thread = None
 
     # --- Esecuzione nel thread worker -------------------------------------
     def _callback_audio(self, indata, frames, time_info, status):
-        """Chiamata da sounddevice per ogni blocco audio acquisito."""
         if status:
-            self._logga("Audio status: %s" % status)
+            log("audio status: %s" % status)
         self._audio_queue.put(bytes(indata))
 
     def _ciclo(self):
-        """Loop principale di riconoscimento (gira nel thread separato)."""
         try:
-            # Import ritardato: avviene nel thread, dopo che pythonpath e' su sys.path.
+            log("thread dettatura: avvio, import vosk/sounddevice...")
+            _stub_dipendenze_opzionali()
             from vosk import Model, KaldiRecognizer
             import sounddevice as sd
+            log("import OK")
 
             if not os.path.isdir(self._model_path):
-                self._logga("Modello Vosk non trovato in: %s" % self._model_path)
+                log("ERRORE: modello Vosk non trovato in: %s" % self._model_path)
                 return
 
             model = Model(self._model_path)
             recognizer = KaldiRecognizer(model, SAMPLE_RATE)
             recognizer.SetWords(False)
+            log("modello caricato, apro stream audio")
 
             with sd.RawInputStream(samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE,
                                    dtype="int16", channels=1,
                                    callback=self._callback_audio):
-                self._logga("Dettatura avviata.")
+                log("ascolto avviato")
                 while not self._stop_event.is_set():
                     try:
                         data = self._audio_queue.get(timeout=0.2)
                     except queue.Empty:
                         continue
-
                     if recognizer.AcceptWaveform(data):
-                        # Frase completa riconosciuta.
                         testo = json.loads(recognizer.Result()).get("text", "")
                         if testo:
+                            log("riconosciuto: %r" % testo)
                             self._inserisci_testo(testo + " ")
 
-                # Svuota l'ultimo parziale rimasto nel recognizer.
                 finale = json.loads(recognizer.FinalResult()).get("text", "")
                 if finale:
                     self._inserisci_testo(finale + " ")
-
-            self._logga("Dettatura fermata.")
+            log("ascolto fermato")
 
         except Exception:
-            self._logga("Errore nel thread di dettatura:\n" + traceback.format_exc())
+            log("ECCEZIONE nel thread dettatura:\n" + traceback.format_exc())
+        finally:
+            if self._on_stop:
+                try:
+                    self._on_stop()
+                except Exception:
+                    log("on_stop fallito:\n" + traceback.format_exc())
 
 
 # ===========================================================================
-# Componente UNO: riceve il click e pilota il MotoreDettatura.
+# Componente UNO: riceve il click, pilota il motore, aggiorna lo stato pulsante.
 # ===========================================================================
 class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
                        XDispatch, XInitialization):
 
     def __init__(self, ctx):
         self.ctx = ctx
-        self.frame = None          # impostato in initialize()
+        self.frame = None
         self.motore = None
+        # Listener della toolbar (per evidenziare il pulsante quando attivo).
+        self._listeners = []   # lista di (XStatusListener, URL)
+        log("DettaturaHandler creato")
 
     # --- XInitialization ---------------------------------------------------
     def initialize(self, args):
-        # LibreOffice passa il frame corrente come primo argomento.
         if args:
             self.frame = args[0]
+        log("initialize: frame=%s" % (self.frame is not None))
 
     # --- XServiceInfo ------------------------------------------------------
     def getImplementationName(self):
@@ -162,7 +299,6 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
 
     # --- XDispatchProvider -------------------------------------------------
     def queryDispatch(self, url, target_frame_name, search_flags):
-        # Accettiamo solo gli URL del nostro protocollo.
         if url.Complete.startswith(PROTOCOL):
             return self
         return None
@@ -173,64 +309,95 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
 
     # --- XDispatch ---------------------------------------------------------
     def dispatch(self, url, args):
+        log("dispatch: %s" % url.Complete)
         if not url.Complete.startswith(PROTOCOL):
             return
         try:
             self._toggle()
         except Exception:
-            self._messaggio("Errore: " + traceback.format_exc())
+            tb = traceback.format_exc()
+            log("ECCEZIONE in dispatch:\n" + tb)
+            self._messaggio("Errore:\n" + tb)
 
     def addStatusListener(self, listener, url):
-        pass
+        # La toolbar registra qui un listener per conoscere lo stato del comando.
+        self._listeners.append((listener, url))
+        # Invia subito lo stato corrente (abilitato, non in ascolto).
+        self._notifica_stato(listener, url, self._in_ascolto())
 
     def removeStatusListener(self, listener, url):
-        pass
+        self._listeners = [(l, u) for (l, u) in self._listeners if l != listener]
 
     # --- Logica applicativa ------------------------------------------------
+    def _in_ascolto(self):
+        return self.motore is not None and self.motore.in_ascolto
+
     def _toggle(self):
-        """Avvia se fermo, ferma se in ascolto."""
         if self.motore is None:
             self.motore = MotoreDettatura(
                 model_path=self._percorso_modello(),
                 inserisci_testo=self._inserisci_al_cursore,
-                logga=self._log,
+                on_stop=self._on_motore_stop,
             )
 
         if self.motore.in_ascolto:
+            log("toggle -> STOP")
             self.motore.ferma()
+            _rilascia_lock()
         else:
+            # Mutua esclusione: non partire se un'altra lingua/finestra ascolta gia'.
+            if not _acquisisci_lock():
+                self._messaggio(
+                    "Dettatura gia' attiva (un'altra lingua o finestra).\n"
+                    "Fermala prima di iniziare qui.")
+                log("toggle START rifiutato: lock occupato")
+                return
+            log("toggle -> START (modello: %s)" % self._percorso_modello())
             self.motore.avvia()
 
-    def _inserisci_al_cursore(self, testo):
-        """Inserisce `testo` esattamente dove si trova il cursore in Writer.
+        self._broadcast_stato(self._in_ascolto())
 
-        Usa il view-cursor del controller corrente: e' la posizione visibile
-        del cursore dell'utente. insertString lo fa avanzare automaticamente.
-        """
+    def _on_motore_stop(self):
+        # Chiamato dal thread quando termina: riporta il pulsante a "non attivo".
+        log("motore terminato -> aggiorno pulsante a OFF")
+        _rilascia_lock()
+        self._broadcast_stato(False)
+
+    def _inserisci_al_cursore(self, testo):
         try:
             doc = self.frame.getController().getModel()
             controller = doc.getCurrentController()
             view_cursor = controller.getViewCursor()
             doc.getText().insertString(view_cursor, testo, False)
         except Exception:
-            self._log("Inserimento fallito:\n" + traceback.format_exc())
+            log("inserimento fallito:\n" + traceback.format_exc())
 
     def _percorso_modello(self):
-        """Restituisce il path su filesystem della cartella `model/` dentro l'oxt."""
         pip = self.ctx.getByName(
             "/singletons/com.sun.star.deployment.PackageInformationProvider")
-        base_url = pip.getPackageLocation(EXTENSION_ID)        # es. file:///.../oxt
+        base_url = pip.getPackageLocation(EXTENSION_ID)
         base_path = unohelper.fileUrlToSystemPath(base_url)
         return os.path.join(base_path, "model")
 
-    # --- Utilita' di feedback ---------------------------------------------
-    def _log(self, msg):
-        # In assenza di un logger UNO, stdout va nel log di LibreOffice/console.
-        sys.stdout.write("[Dettatura] %s\n" % msg)
-        sys.stdout.flush()
+    # --- Stato pulsante (toggle) ------------------------------------------
+    def _broadcast_stato(self, in_ascolto):
+        """Notifica a tutti i listener della toolbar il nuovo stato premuto."""
+        for listener, url in list(self._listeners):
+            self._notifica_stato(listener, url, in_ascolto)
 
+    def _notifica_stato(self, listener, url, in_ascolto):
+        try:
+            ev = uno.createUnoStruct("com.sun.star.frame.FeatureStateEvent")
+            ev.FeatureURL = url
+            ev.IsEnabled = True
+            ev.Requery = False
+            ev.State = bool(in_ascolto)   # True -> pulsante mostrato premuto
+            listener.statusChanged(ev)
+        except Exception:
+            log("notifica stato fallita:\n" + traceback.format_exc())
+
+    # --- Feedback errori ---------------------------------------------------
     def _messaggio(self, msg):
-        """Mostra un messaggio modale all'utente (per gli errori bloccanti)."""
         try:
             from com.sun.star.awt.MessageBoxType import ERRORBOX
             toolkit = self.ctx.getServiceManager().createInstanceWithContext(
@@ -239,7 +406,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             box = toolkit.createMessageBox(parent, ERRORBOX, 1, "Dettatura Vocale", msg)
             box.execute()
         except Exception:
-            self._log(msg)
+            log("messagebox fallita: " + msg)
 
 
 # ===========================================================================
@@ -251,3 +418,4 @@ g_ImplementationHelper.addImplementation(
     IMPL_NAME,
     SERVICE_NAMES,
 )
+log("componente registrato: %s" % IMPL_NAME)

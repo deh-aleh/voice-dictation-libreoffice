@@ -21,9 +21,18 @@ Un `.oxt` è un archivio **ZIP** con una struttura precisa alla radice:
 └── model/                   # <-- dati (modello Vosk)
 ```
 
-Punto chiave: la radice dell'archivio coincide con `src/`. Lo zip **non** deve
-contenere una cartella `src/` di livello superiore. Vedi `scripts/build_oxt.sh`
-(`cd src && zip -r out.oxt .`).
+Punto chiave: la radice dell'archivio coincide con il contenuto di `src/`. Lo zip
+**non** deve contenere una cartella `src/` di livello superiore.
+
+La build non zippa `src/` direttamente: usa una **cartella di staging**
+(`build/stage/<lang>-<platform>/`) dove `scripts/build_oxt.sh`:
+1. copia `src/` (senza `pythonpath/`/`model/`);
+2. inietta le deps native (`build/deps/`) e il modello giusto (`build/models/<lang>/`);
+3. applica le sostituzioni e zippa via `scripts/_pack.py` (zip puro in Python,
+   portabile su Linux/Windows/macOS senza dipendere da `zip`/`unzip`).
+
+Così `src/` resta pulito e versionabile, e da un solo albero sorgente escono N
+pacchetti (lingua × piattaforma).
 
 ---
 
@@ -35,18 +44,24 @@ contenere una cartella `src/` di livello superiore. Vedi `scripts/build_oxt.sh`
 > automaticamente la sottocartella `pythonpath/` di quell'estensione a
 > `sys.path`.
 
-Conseguenza pratica: qualsiasi pacchetto messo in `src/pythonpath/` diventa
-importabile dal componente **senza** che l'utente installi nulla con `pip`.
+Conseguenza pratica: qualsiasi pacchetto bundlato in `pythonpath/` diventa
+importabile dal componente **senza** che l'utente installi nulla con `pip`. Le
+librerie le produce `scripts/fetch_deps.sh` in `build/deps/`, e `build_oxt.sh` le
+copia nello staging come `pythonpath/`:
 
 ```
-src/pythonpath/
-├── vosk/
-├── sounddevice.py
-├── _sounddevice.py
-├── cffi/
-├── _cffi_backend.*.so
-└── vosk/libvosk.so          # binario nativo del motore
+pythonpath/
+├── vosk/  (con libvosk.so)        # binario nativo del motore
+├── sounddevice.py, _sounddevice.py
+├── cffi/                          # parte pure-python di cffi (una copia)
+├── _cffi_backend.cpython-39-*.so  ┐  un binario per OGNI minor Python
+├── _cffi_backend.cpython-310-*.so │  (3.9–3.14): LibreOffice carica da solo
+├── ...                            │  quello che combacia col suo interprete
+└── _cffi_backend.cpython-314-*.so ┘  (vedi §3)
 ```
+
+`dettatura.py` inserisce `pythonpath/` in **testa** a `sys.path` (riga ~41) così
+il bundle self-consistent vince su eventuali pacchetti di sistema rotti.
 
 Nel codice (`dettatura.py`) l'import è **ritardato** dentro il thread worker:
 
@@ -75,43 +90,37 @@ varia tra distribuzioni/OS. Bundlare in `pythonpath/` elimina queste variabili.
 | `sounddevice` | `cffi` + **PortAudio** (`libportaudio`)    |
 
 Un binario compilato per Linux x86_64 **non** gira su Windows o macOS o ARM.
-Quindi un singolo `.oxt` "all-in-one" è davvero universale **solo se** include i
-binari di **tutte** le piattaforme target.
+Quindi un `.oxt` è legato a OS/arch: serve **una release per piattaforma**.
 
-### Strategia A — un `.oxt` per piattaforma (consigliata)
-Pubblicare release separate:
-`dettatura-vocale-linux-x86_64.oxt`, `-windows-x86_64.oxt`, `-macos-arm64.oxt`.
-Ogni build esegue `make deps` sulla piattaforma corrispondente (o usa CI con
-matrice di OS). `description.xml` può dichiarare la `<platform>` specifica.
+### Strategia adottata: un `.oxt` per piattaforma, costruito in CI
+GitHub Actions (`.github/workflows/release.yml`) usa una **matrice di OS**
+(`ubuntu`, `windows`, `macos`): ogni runner esegue `fetch_deps.sh` con il proprio
+OS e produce le wheel native di **quella** piattaforma — impossibile da una sola
+macchina. `description.xml` dichiara la `<platform>` specifica (token
+`linux_x86_64` / `windows_x86_64` / `macosx_aarch64`, iniettato a build-time).
 
-### Strategia B — un `.oxt` universale "fat"
-Mantenere binari per più piattaforme in sottocartelle e selezionarli a runtime
-aggiungendo la cartella giusta a `sys.path` in cima a `dettatura.py`:
+Su tag `v*` la CI produce **6 oxt** (it/en × 3 OS) e le allega a una Release.
 
-```python
-import os, sys, platform
-_here = os.path.dirname(__file__)
-_plat = "%s-%s" % (platform.system().lower(), platform.machine().lower())
-_libs = os.path.join(_here, "pythonpath", _plat)
-if os.path.isdir(_libs):
-    sys.path.insert(0, _libs)
-```
+### Compatibilità versione Python — la soluzione vera
+Le wheel native sono legate alla **minor di CPython** (cp39, cp310, …). Il Python
+interno di LibreOffice **varia**: su Windows/macOS LO porta il suo (fisso per
+versione di LO); su Linux usa quello di **sistema** (Arch oggi 3.14, Ubuntu LTS
+3.10…). Non esiste UN solo target.
 
-Con layout:
-```
-pythonpath/
-├── linux-x86_64/
-├── windows-amd64/
-└── darwin-arm64/
-```
-Costo: `.oxt` molto più pesante. Vantaggio: installazione unica.
+Analisi dello stack — solo **un** pezzo è legato alla minor:
 
-### Compatibilità versione Python
-Le wheel native sono legate alla minor di CPython (es. cp310). Il Python interno
-di LibreOffice ha una sua versione. **Best practice:** generare le wheel con una
-versione di Python ≈ quella di LO (verificabile con `Strumenti > Macro >
-Modifica > Shell`, oppure dal log). Wheel `abi3` (stable ABI), quando
-disponibili, riducono il problema.
+| Pacchetto     | Tag wheel            | Legato a versione Python? |
+|---------------|----------------------|---------------------------|
+| `sounddevice` | `py3-none-any`       | No (pure-python)          |
+| `vosk`        | `py3-none-<plat>`    | No (solo OS/arch; `libvosk` caricata via cffi) |
+| `cffi`        | `cpXX-cpXX-<plat>`   | **Sì** — `_cffi_backend`  |
+
+`cffi` **non** pubblica wheel `abi3`. Soluzione adottata: **bundlare un
+`_cffi_backend` per ogni minor 3.9–3.14**. Il nome del file contiene la versione
+(`_cffi_backend.cpython-312-…so`) e Python carica **solo** quello che combacia col
+proprio interprete. Risultato: lo stesso oxt gira su ogni LibreOffice con Python
+3.9–3.14, Arch 3.14 compreso. Lo fa `fetch_deps.sh` step [2/2] via
+`pip download --abi cpXX`. (Python ≤ 3.8 resta fuori: `cffi 2.0.0` parte da cp39.)
 
 ---
 
@@ -166,3 +175,38 @@ doc.getText().insertString(view_cursor, testo, False)
 > worker funziona nella pratica per testo breve, ma l'approccio più sicuro è
 > marshalare l'update sul thread principale (es. un `com.sun.star.awt.XCallback` /
 > timer idle). Migliorìa pianificata — vedi [STATO_PROGETTO.md](STATO_PROGETTO.md).
+
+---
+
+## 7. Coesistenza multilingua (it, en, …)
+
+Le estensioni di lingue diverse possono essere **installate insieme**. Perché
+LibreOffice le tenga separate, ogni loro identificatore di registro dev'essere
+**univoco**. I sorgenti usano prefissi coerenti; `scripts/_pack.py` inietta il
+codice lingua a build-time:
+
+```
+org.libreitalia.dettaturavocale   ->  org.libreitalia.dettaturavocale.<lang>
+vnd.libreitalia.dettatura:        ->  vnd.libreitalia.dettatura.<lang>:
+```
+
+Con due sole sostituzioni diventano distinti **tutti insieme**: `identifier`
+(description.xml), `IMPL_NAME`/`PROTOCOL`/`EXTENSION_ID` (dettatura.py), il nodo
+`HandlerSet` (ProtocolHandler.xcu) e i nodi menu/toolbar/image (Addons.xcu).
+Restano coerenti tra loro (è il collante descritto in §5). Quindi
+`getPackageLocation(EXTENSION_ID)` di §4 a runtime riceve l'id giusto `.<lang>`.
+
+### Mutua esclusione a runtime (lockfile)
+Coesistere installate **non** vuol dire poter ascoltare il microfono insieme: due
+motori Vosk sullo stesso input si pestano. Visto che IT ed EN girano nello stesso
+processo `soffice`, un **lockfile dal nome FISSO** (non per-lingua) li coordina:
+
+```
+<tmp>/voice-dictation.lock        # contiene: PID + identifier del titolare
+```
+
+`dettatura.py` allo START chiama `_acquisisci_lock()`: se un'istanza **viva**
+detiene il lock (PID controllato in modo cross-platform, niente `os.kill` su
+Windows), rifiuta e avvisa l'utente. Allo STOP / a fine motore chiama
+`_rilascia_lock()` (rimuove solo se il lock è suo). I lock **stantii** (processo
+morto dopo un crash) vengono riconosciuti e sovrascritti.

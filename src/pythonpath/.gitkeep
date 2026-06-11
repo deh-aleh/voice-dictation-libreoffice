@@ -1,4 +1,0 @@
-# Le dipendenze Python (vosk, sounddevice, cffi, ...) vengono installate qui
-# dallo script scripts/fetch_deps.sh. LibreOffice aggiunge automaticamente questa
-# cartella a sys.path per i componenti Python dell'estensione.
-# Contenuto ignorato da git (vedi .gitignore): si rigenera in fase di build.

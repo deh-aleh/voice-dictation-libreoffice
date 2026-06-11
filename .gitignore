@@ -1,11 +1,6 @@
-# Artefatti di build
+# Artefatti di build (deps native, modelli, staging, oxt): si rigenerano
+/build/
 /dist/
-
-# Dipendenze e modello bundlati (pesanti / specifici per piattaforma): si rigenerano
-src/pythonpath/*
-!src/pythonpath/.gitkeep
-src/model/*
-!src/model/.gitkeep
 
 # Python
 __pycache__/
