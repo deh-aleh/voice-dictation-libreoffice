@@ -64,33 +64,18 @@
       </node>
     </node>
 
-    <!-- Due pulsanti in toolbar: "Inizia" (verde) e "Ferma" (rosso).
-         Lo stato e' reso abilitando/disabilitando: inattivo -> verde acceso,
-         rosso grigio; in ascolto -> verde grigio, rosso acceso. -->
+    <!-- Pulsante unico "interruttore": stessa icona-microfono che cambia colore a
+         runtime (verde = pronto, rosso = in ascolto). Lo swap colore lo fa
+         dettatura.py via XImageManager; qui registriamo l'icona VERDE di default. -->
     <node oor:name="OfficeToolBar">
       <node oor:name="org.libreitalia.dettaturavocale.toolbar" oor:op="replace">
         <node oor:name="m1" oor:op="replace">
           <prop oor:name="URL" oor:type="xs:string">
-            <value>vnd.libreitalia.dettatura:start</value>
+            <value>vnd.libreitalia.dettatura:toggle</value>
           </prop>
           <prop oor:name="Title" oor:type="xs:string">
-            <value xml:lang="it">Inizia Dettatura</value>
-            <value xml:lang="en">Start Dictation</value>
-          </prop>
-          <prop oor:name="Target" oor:type="xs:string">
-            <value>_self</value>
-          </prop>
-          <prop oor:name="Context" oor:type="xs:string">
-            <value>com.sun.star.text.TextDocument</value>
-          </prop>
-        </node>
-        <node oor:name="m2" oor:op="replace">
-          <prop oor:name="URL" oor:type="xs:string">
-            <value>vnd.libreitalia.dettatura:stop</value>
-          </prop>
-          <prop oor:name="Title" oor:type="xs:string">
-            <value xml:lang="it">Ferma Dettatura</value>
-            <value xml:lang="en">Stop Dictation</value>
+            <value xml:lang="it">Inizia/Ferma Dettatura</value>
+            <value xml:lang="en">Start/Stop Dictation</value>
           </prop>
           <prop oor:name="Target" oor:type="xs:string">
             <value>_self</value>
@@ -102,11 +87,12 @@
       </node>
     </node>
 
-    <!-- Associazione comando -> icone (16px normale, 26px HiDPI/barre grandi). -->
+    <!-- Icona di default del pulsante: microfono VERDE (pronto). Quando la
+         dettatura parte, dettatura.py sostituisce a runtime con la versione rossa. -->
     <node oor:name="Images">
-      <node oor:name="org.libreitalia.dettaturavocale.image.start" oor:op="replace">
+      <node oor:name="org.libreitalia.dettaturavocale.image.toggle" oor:op="replace">
         <prop oor:name="URL" oor:type="xs:string">
-          <value>vnd.libreitalia.dettatura:start</value>
+          <value>vnd.libreitalia.dettatura:toggle</value>
         </prop>
         <node oor:name="UserDefinedImages">
           <prop oor:name="ImageSmallURL" oor:type="xs:string">
@@ -114,19 +100,6 @@
           </prop>
           <prop oor:name="ImageBigURL" oor:type="xs:string">
             <value>%origin%/icons/mic_start_26.png</value>
-          </prop>
-        </node>
-      </node>
-      <node oor:name="org.libreitalia.dettaturavocale.image.stop" oor:op="replace">
-        <prop oor:name="URL" oor:type="xs:string">
-          <value>vnd.libreitalia.dettatura:stop</value>
-        </prop>
-        <node oor:name="UserDefinedImages">
-          <prop oor:name="ImageSmallURL" oor:type="xs:string">
-            <value>%origin%/icons/mic_stop_16.png</value>
-          </prop>
-          <prop oor:name="ImageBigURL" oor:type="xs:string">
-            <value>%origin%/icons/mic_stop_26.png</value>
           </prop>
         </node>
       </node>

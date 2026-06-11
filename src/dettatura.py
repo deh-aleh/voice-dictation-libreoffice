@@ -378,16 +378,12 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         log("dispatch: %s" % url.Complete)
         if not url.Complete.startswith(PROTOCOL):
             return
-        # L'azione e' la parte dopo il protocollo: start | stop | toggle | openlog.
+        # L'azione e' la parte dopo il protocollo: toggle | openlog.
         azione = url.Complete[len(PROTOCOL):]
         try:
             if azione == "openlog":
                 self._apri_cartella_log()
-            elif azione == "start":
-                self._avvia_dettatura()
-            elif azione == "stop":
-                self._ferma_dettatura()
-            else:  # "toggle" (voce di menu)
+            else:  # "toggle"
                 self._toggle()
         except Exception:
             tb = traceback.format_exc()
@@ -446,6 +442,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             return
         log("START (modello: %s)" % self._percorso_modello())
         self.motore.avvia()
+        self._imposta_icona(True)
         self._broadcast_stato(self._in_ascolto())
 
     def _ferma_dettatura(self):
@@ -453,6 +450,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             log("STOP")
             self.motore.ferma()
             _rilascia_lock()
+        self._imposta_icona(False)
         self._broadcast_stato(self._in_ascolto())
 
     def _toggle(self):
@@ -466,6 +464,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         # Chiamato dal thread quando termina: riporta il pulsante a "non attivo".
         log("motore terminato -> aggiorno pulsante a OFF")
         _rilascia_lock()
+        self._imposta_icona(False)
         self._broadcast_stato(False)
 
     def _inserisci_al_cursore(self, testo):
@@ -492,24 +491,59 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
 
     def _notifica_stato(self, listener, url, in_ascolto):
         try:
-            cmd = url.Complete[len(PROTOCOL):] if url.Complete.startswith(PROTOCOL) else ""
-            if cmd == "start":
-                # Verde "Inizia": attivo solo quando NON si sta ascoltando.
-                abilitato, premuto = (not in_ascolto), False
-            elif cmd == "stop":
-                # Rosso "Ferma": attivo solo quando si sta ascoltando.
-                abilitato, premuto = bool(in_ascolto), bool(in_ascolto)
-            else:
-                # "toggle" (menu): sempre attivo, premuto se in ascolto.
-                abilitato, premuto = True, (cmd == "toggle" and bool(in_ascolto))
             ev = uno.createUnoStruct("com.sun.star.frame.FeatureStateEvent")
             ev.FeatureURL = url
-            ev.IsEnabled = abilitato
+            ev.IsEnabled = True
             ev.Requery = False
-            ev.State = premuto
+            ev.State = bool(in_ascolto)   # True -> pulsante mostrato premuto
             listener.statusChanged(ev)
         except Exception:
             log("notifica stato fallita:\n" + traceback.format_exc())
+
+    # --- Colore icona: verde (pronto) <-> rosso (in ascolto) --------------
+    def _package_url(self):
+        """URL (file://) della cartella dell'estensione installata."""
+        pip = self.ctx.getByName(
+            "/singletons/com.sun.star.deployment.PackageInformationProvider")
+        return pip.getPackageLocation(EXTENSION_ID)
+
+    def _imposta_icona(self, in_ascolto):
+        """Sostituisce a runtime l'icona del comando toggle: rosso se in ascolto,
+        verde se pronto. Usa l'ImageManager del modulo Writer."""
+        try:
+            from com.sun.star.beans import PropertyValue
+            nome = "mic_stop" if in_ascolto else "mic_start"
+            base = self._package_url()
+            smgr = self.ctx.getServiceManager()
+            gp = smgr.createInstanceWithContext(
+                "com.sun.star.graphic.GraphicProvider", self.ctx)
+
+            def _grafica(file_png):
+                p = PropertyValue()
+                p.Name = "URL"
+                p.Value = base + "/icons/" + file_png
+                return gp.queryGraphic((p,))
+
+            supplier = smgr.createInstanceWithContext(
+                "com.sun.star.ui.ModuleUIConfigurationManagerSupplier", self.ctx)
+            ucm = supplier.getUIConfigurationManager(
+                "com.sun.star.text.TextDocument")
+            im = ucm.getImageManager()
+            cmd = PROTOCOL + "toggle"
+            # ImageType 0 = piccola (default), 1 = grande (SIZE_LARGE).
+            im.replaceImages(0, (cmd,), (_grafica(nome + "_16.png"),))
+            try:
+                im.replaceImages(1, (cmd,), (_grafica(nome + "_26.png"),))
+            except Exception:
+                pass
+            try:
+                if im.isModified():
+                    im.store()
+            except Exception:
+                pass
+            log("icona -> %s" % nome)
+        except Exception:
+            log("set icona fallita:\n" + traceback.format_exc())
 
     # --- Feedback errori ---------------------------------------------------
     def _messaggio(self, msg):

@@ -73,9 +73,16 @@ Apri il log e cerca `ERRORE` o `ECCEZIONE`.
 
 - Devi essere in **Writer** (il pulsante è solo lì, non in Calc/Impress).
 - Riavvia LibreOffice dopo l'installazione.
-- Se non lo trovi in toolbar, usa il menu **Dettatura** nella barra dei menu.
+- **La barra dell'add-on potrebbe essere nascosta** (capita su Windows): apri
+  **Visualizza → Barre degli strumenti** e attiva la voce dell'add-on (es.
+  "Componente aggiuntivo 1" / "Add-On 1").
+- In ogni caso il comando è **sempre** disponibile dal menu **Dettatura** nella
+  barra dei menu (Inizia/Ferma + Apri cartella log).
 - Estensione installata? Strumenti → Gestione estensioni: deve comparire
   "Voice Dictation (Vosk - …)".
+
+Il pulsante è un **interruttore**: microfono **verde** = pronto, **rosso** = in
+ascolto (il colore cambia da solo a ogni avvio/stop).
 
 ---
 
