@@ -286,15 +286,30 @@ class MotoreDettatura:
             recognizer.SetWords(False)
             log("modello caricato, apro stream audio")
 
+            import array
             with sd.RawInputStream(samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE,
                                    dtype="int16", channels=1,
                                    callback=self._callback_audio):
                 log("ascolto avviato")
+                blocchi = 0
+                livello_max = 0
                 while not self._stop_event.is_set():
                     try:
                         data = self._audio_queue.get(timeout=0.2)
                     except queue.Empty:
                         continue
+                    blocchi += 1
+                    # Strumentazione: ogni ~25 blocchi logga livello audio + parziale Vosk.
+                    if blocchi % 25 == 1:
+                        try:
+                            campioni = array.array("h")
+                            campioni.frombytes(data)
+                            liv = max((abs(x) for x in campioni), default=0)
+                            livello_max = max(livello_max, liv)
+                            parziale = json.loads(recognizer.PartialResult()).get("partial", "")
+                            log("blocco=%d livello=%d parziale=%r" % (blocchi, liv, parziale))
+                        except Exception:
+                            log("instrum. fallita:\n" + traceback.format_exc())
                     if recognizer.AcceptWaveform(data):
                         testo = json.loads(recognizer.Result()).get("text", "")
                         if testo:
@@ -302,6 +317,8 @@ class MotoreDettatura:
                             self._inserisci_testo(testo + " ")
 
                 finale = json.loads(recognizer.FinalResult()).get("text", "")
+                log("fine ascolto: blocchi=%d livello_max=%d finale=%r"
+                    % (blocchi, livello_max, finale))
                 if finale:
                     self._inserisci_testo(finale + " ")
             log("ascolto fermato")
