@@ -13,7 +13,7 @@
   <identifier value="org.libreitalia.dettaturavocale"/>
 
   <!-- Versione dell'estensione (semver). -->
-  <version value="0.1.0"/>
+  <version value="0.2.2"/>
 
   <!-- Versione minima di LibreOffice (Python 3 + pyuno moderni).
        NB: usare l'elemento LibreOffice-minimal-version, NON

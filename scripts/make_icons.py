@@ -3,23 +3,26 @@
 """Genera le icone PNG del pulsante (microfono) senza dipendenze esterne.
 
 Produce in src/icons/:
-  - mic_16.png          16x16  (toolbar standard)
-  - mic_26.png          26x26  (HiDPI / barre grandi)
-  - extension_icon.png  32x32  (Gestione estensioni)
+  - mic_16.png / mic_26.png             microfono neutro (icona estensione/menu)
+  - mic_start_16.png / mic_start_26.png microfono VERDE  (pulsante "Inizia")
+  - mic_stop_16.png  / mic_stop_26.png  microfono ROSSO  (pulsante "Ferma")
+  - extension_icon.png 32x32            (Gestione estensioni)
 
-Disegno: silhouette di microfono su sfondo trasparente. Lo stato on/off in
-LibreOffice e' reso dal pulsante "premuto" (toggle), non da icone diverse.
+Due pulsanti separati in toolbar: verde "Inizia" e rosso "Ferma". Lo stato e' reso
+abilitando/disabilitando i due pulsanti (il pertinente resta acceso, l'altro grigio).
 """
 import os
 import zlib
 import struct
 
-# Colore del microfono (slate scuro), opaco.
-FG = (60, 64, 72, 255)
+# Colori del microfono (opachi).
+FG = (60, 64, 72, 255)        # neutro (slate)
+FG_START = (38, 162, 64, 255)  # verde "vai"
+FG_STOP = (208, 48, 48, 255)   # rosso "in ascolto/ferma"
 TRANSP = (0, 0, 0, 0)
 
 
-def disegna_mic(size):
+def disegna_mic(size, fg=FG):
     """Restituisce una matrice RGBA (lista di righe di tuple) con un microfono."""
     s = size
     px = [[TRANSP for _ in range(s)] for _ in range(s)]
@@ -65,7 +68,7 @@ def disegna_mic(size):
                 on = True
 
             if on:
-                px[y][x] = FG
+                px[y][x] = fg
     return px
 
 
@@ -94,8 +97,17 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     out = os.path.join(here, "..", "src", "icons")
     os.makedirs(out, exist_ok=True)
-    for name, size in (("mic_16.png", 16), ("mic_26.png", 26), ("extension_icon.png", 32)):
-        scrivi_png(os.path.join(out, name), disegna_mic(size))
+    icone = (
+        ("mic_16.png", 16, FG),
+        ("mic_26.png", 26, FG),
+        ("extension_icon.png", 32, FG),
+        ("mic_start_16.png", 16, FG_START),
+        ("mic_start_26.png", 26, FG_START),
+        ("mic_stop_16.png", 16, FG_STOP),
+        ("mic_stop_26.png", 26, FG_STOP),
+    )
+    for name, size, fg in icone:
+        scrivi_png(os.path.join(out, name), disegna_mic(size, fg))
         print("scritto", name)
 
 

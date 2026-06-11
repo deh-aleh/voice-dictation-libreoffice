@@ -11,5 +11,8 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Log di diagnostica (runtime)
+*.log
+
 # Knowledge graph locale (graphify) - non versionato
 /graphify-out/

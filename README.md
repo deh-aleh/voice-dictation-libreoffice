@@ -126,6 +126,16 @@ Cosa fa il programma passo per passo: [docs/STORICO.md](docs/STORICO.md).
 
 ---
 
+## Non scrive? Risoluzione problemi
+
+Writer → menu **Dettatura → Apri cartella dei log** e leggi `dettatura_libreoffice.log`.
+Causa più comune: **microfono mutato, a volume 0, o permessi**.
+
+- 🪟 [docs/TROUBLESHOOTING_WINDOWS.md](docs/TROUBLESHOOTING_WINDOWS.md)
+- 🐧 [docs/TROUBLESHOOTING_LINUX.md](docs/TROUBLESHOOTING_LINUX.md)
+
+---
+
 ## Licenza
 
 [MIT](LICENSE).

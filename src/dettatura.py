@@ -378,12 +378,16 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         log("dispatch: %s" % url.Complete)
         if not url.Complete.startswith(PROTOCOL):
             return
-        # L'azione e' la parte dopo il protocollo: "toggle" oppure "openlog".
+        # L'azione e' la parte dopo il protocollo: start | stop | toggle | openlog.
         azione = url.Complete[len(PROTOCOL):]
         try:
             if azione == "openlog":
                 self._apri_cartella_log()
-            else:
+            elif azione == "start":
+                self._avvia_dettatura()
+            elif azione == "stop":
+                self._ferma_dettatura()
+            else:  # "toggle" (voce di menu)
                 self._toggle()
         except Exception:
             tb = traceback.format_exc()
@@ -421,7 +425,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
     def _in_ascolto(self):
         return self.motore is not None and self.motore.in_ascolto
 
-    def _toggle(self):
+    def _assicura_motore(self):
         if self.motore is None:
             self.motore = MotoreDettatura(
                 model_path=self._percorso_modello(),
@@ -429,22 +433,34 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
                 on_stop=self._on_motore_stop,
             )
 
+    def _avvia_dettatura(self):
+        self._assicura_motore()
         if self.motore.in_ascolto:
-            log("toggle -> STOP")
+            return
+        # Mutua esclusione: non partire se un'altra lingua/finestra ascolta gia'.
+        if not _acquisisci_lock():
+            self._messaggio(
+                "Dettatura gia' attiva (un'altra lingua o finestra).\n"
+                "Fermala prima di iniziare qui.")
+            log("START rifiutato: lock occupato")
+            return
+        log("START (modello: %s)" % self._percorso_modello())
+        self.motore.avvia()
+        self._broadcast_stato(self._in_ascolto())
+
+    def _ferma_dettatura(self):
+        if self.motore is not None and self.motore.in_ascolto:
+            log("STOP")
             self.motore.ferma()
             _rilascia_lock()
-        else:
-            # Mutua esclusione: non partire se un'altra lingua/finestra ascolta gia'.
-            if not _acquisisci_lock():
-                self._messaggio(
-                    "Dettatura gia' attiva (un'altra lingua o finestra).\n"
-                    "Fermala prima di iniziare qui.")
-                log("toggle START rifiutato: lock occupato")
-                return
-            log("toggle -> START (modello: %s)" % self._percorso_modello())
-            self.motore.avvia()
-
         self._broadcast_stato(self._in_ascolto())
+
+    def _toggle(self):
+        self._assicura_motore()
+        if self.motore.in_ascolto:
+            self._ferma_dettatura()
+        else:
+            self._avvia_dettatura()
 
     def _on_motore_stop(self):
         # Chiamato dal thread quando termina: riporta il pulsante a "non attivo".
@@ -476,11 +492,21 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
 
     def _notifica_stato(self, listener, url, in_ascolto):
         try:
+            cmd = url.Complete[len(PROTOCOL):] if url.Complete.startswith(PROTOCOL) else ""
+            if cmd == "start":
+                # Verde "Inizia": attivo solo quando NON si sta ascoltando.
+                abilitato, premuto = (not in_ascolto), False
+            elif cmd == "stop":
+                # Rosso "Ferma": attivo solo quando si sta ascoltando.
+                abilitato, premuto = bool(in_ascolto), bool(in_ascolto)
+            else:
+                # "toggle" (menu): sempre attivo, premuto se in ascolto.
+                abilitato, premuto = True, (cmd == "toggle" and bool(in_ascolto))
             ev = uno.createUnoStruct("com.sun.star.frame.FeatureStateEvent")
             ev.FeatureURL = url
-            ev.IsEnabled = True
+            ev.IsEnabled = abilitato
             ev.Requery = False
-            ev.State = bool(in_ascolto)   # True -> pulsante mostrato premuto
+            ev.State = premuto
             listener.statusChanged(ev)
         except Exception:
             log("notifica stato fallita:\n" + traceback.format_exc())
