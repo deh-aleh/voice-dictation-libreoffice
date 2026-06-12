@@ -50,6 +50,27 @@ mkdir -p "$STAGE/pythonpath" "$STAGE/model"
 cp -a "$DEPS"/.  "$STAGE/pythonpath"/
 cp -a "$MODEL"/. "$STAGE/model"/
 
+# Per-language toolbar icons. Addons.xcu and dettatura.py reference the generic
+# names (mic_start_16.png, mic_stop_26.png, ...); here we overlay the variant for
+# this language onto those generic names, then drop the variants from the package.
+# Icon suffix differs from the lang code: it -> _it, en -> _eng.
+case "$LANG_CODE" in
+  it) ICON_LANG="it" ;;
+  en) ICON_LANG="eng" ;;
+  *)  ICON_LANG="" ;;
+esac
+if [ -n "$ICON_LANG" ] && [ -d "$STAGE/icons" ]; then
+  for base in mic_start_16 mic_start_26 mic_stop_16 mic_stop_26; do
+    variant="$STAGE/icons/${base}_${ICON_LANG}.png"
+    if [ -f "$variant" ]; then
+      cp -f "$variant" "$STAGE/icons/${base}.png"
+      echo ">> icon $base <- ${base}_${ICON_LANG}.png"
+    fi
+  done
+  # Keep the package lean: ship only the resolved generic icons.
+  rm -f "$STAGE"/icons/*_it.png "$STAGE"/icons/*_eng.png
+fi
+
 echo ">> Sostituzioni (lang=$LANG_CODE, platform=$LO_PLATFORM) + zip"
 "$PYBIN" "$ROOT/scripts/_pack.py" \
     --stage "$STAGE" --out "$OUT" \

@@ -42,8 +42,21 @@ _PYTHONPATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pythonpa
 if os.path.isdir(_PYTHONPATH) and sys.path[0:1] != [_PYTHONPATH]:
     sys.path.insert(0, _PYTHONPATH)
 
+# La cartella del componente non e' garantita in sys.path sotto il loader UNO:
+# inseriamola cosi' i moduli sorella (trasformazione.py) sono importabili.
+_SELFDIR = os.path.dirname(os.path.abspath(__file__))
+if _SELFDIR not in sys.path:
+    sys.path.insert(0, _SELFDIR)
+
 from com.sun.star.frame import XDispatchProvider, XDispatch
 from com.sun.star.lang import XServiceInfo, XInitialization
+
+# Post-elaborazione testo (punteggiatura + numeri). Import difensivo: se manca,
+# si inserisce il testo grezzo invece di rompere il caricamento del componente.
+try:
+    import trasformazione
+except Exception:
+    trasformazione = None
 
 # ---------------------------------------------------------------------------
 # Costanti di registrazione. Devono combaciare con ProtocolHandler.xcu.
@@ -210,6 +223,18 @@ def _diagnostica_ambiente():
         log("diagnostica fallita:\n" + traceback.format_exc())
 
 
+def _post(testo):
+    """Applica punteggiatura + numeri al testo Vosk. Best-effort: in caso di
+    errore (o modulo assente) ritorna il testo grezzo."""
+    if trasformazione is None:
+        return testo
+    try:
+        return trasformazione.trasforma(testo)
+    except Exception:
+        log("trasformazione fallita:\n" + traceback.format_exc())
+        return testo
+
+
 # ===========================================================================
 # Motore di riconoscimento: Vosk + acquisizione audio nel suo thread.
 # ===========================================================================
@@ -314,13 +339,13 @@ class MotoreDettatura:
                         testo = json.loads(recognizer.Result()).get("text", "")
                         if testo:
                             log("riconosciuto: %r" % testo)
-                            self._inserisci_testo(testo + " ")
+                            self._inserisci_testo(_post(testo) + " ")
 
                 finale = json.loads(recognizer.FinalResult()).get("text", "")
                 log("fine ascolto: blocchi=%d livello_max=%d finale=%r"
                     % (blocchi, livello_max, finale))
                 if finale:
-                    self._inserisci_testo(finale + " ")
+                    self._inserisci_testo(_post(finale) + " ")
             log("ascolto fermato")
 
         except Exception:
