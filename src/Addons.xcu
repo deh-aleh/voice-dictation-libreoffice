@@ -4,9 +4,10 @@
 
   Comandi (protocollo per-lingua "vnd.libreitalia.dettatura:", instradato da
   ProtocolHandler.xcu -> dettatura.py):
-    :toggle         -> avvia/ferma la dettatura (icona microfono verde<->rosso)
-    :togglenumbers  -> attiva/disattiva il riconoscimento dei NUMERI
-    :togglepunct    -> attiva/disattiva il riconoscimento della PUNTEGGIATURA
+    :toggle          -> avvia/ferma la dettatura (icona microfono verde<->rosso)
+    :togglenumbers   -> attiva/disattiva il riconoscimento dei NUMERI
+    :togglepunct     -> attiva/disattiva il riconoscimento della PUNTEGGIATURA
+    :togglecommands  -> attiva/disattiva i COMANDI di formattazione
 
   NB: niente voce "apri cartella log" (con it+en installate LibreOffice fonde i
   menu add-on con lo stesso titolo ma NON deduplica le voci, quindi comparirebbe
@@ -76,6 +77,21 @@
             <prop oor:name="Title" oor:type="xs:string">
               <value xml:lang="it">Punteggiatura: attiva/disattiva</value>
               <value xml:lang="en">Punctuation: on/off</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument</value>
+            </prop>
+          </node>
+          <node oor:name="m4" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>vnd.libreitalia.dettatura:togglecommands</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="it">Comandi formattazione: attiva/disattiva</value>
+              <value xml:lang="en">Formatting commands: on/off</value>
             </prop>
             <prop oor:name="Target" oor:type="xs:string">
               <value>_self</value>

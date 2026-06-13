@@ -121,7 +121,14 @@ LOG_MAX_BYTES = 4 * 1024 * 1024
 #   NEXT_CAPITAL    capitalize ONLY the first letter of the next dictated word
 #   CAPSLOCK_ON/OFF voice caps lock: everything UPPERCASE until turned off
 #   UNDO_LAST       undo the last inserted block (.uno:Undo)
+#   REDO_LAST       redo the last undone action (.uno:Redo)
 #   RESET_FORMAT    clear bold/italic/underline and any active case state
+#   PAGE_BREAK      insert a page break (.uno:InsertPagebreak)
+#   ALIGN_LEFT/CENTER/RIGHT/JUSTIFY   paragraph alignment (.uno:*Para)
+#   PRINT           open the print dialog (.uno:Print)
+#   FONT_UP/FONT_DOWN   grow/shrink the size of the next dictated text. An
+#     optional trailing spoken number sets the amount in points
+#     ("aumenta font cinque" -> +5); with no number a default step is used.
 # ---------------------------------------------------------------------------
 _COMMANDS_IT = {
     "elenco puntato":         "TOGGLE_BULLET_LIST",
@@ -141,7 +148,21 @@ _COMMANDS_IT = {
     "fine maiuscolo":         "CAPSLOCK_OFF",
     "maiuscolo":              "NEXT_CAPITAL",
     "cancella ultimo":        "UNDO_LAST",
+    "rifai":                  "REDO_LAST",
+    "ripristina":             "REDO_LAST",
     "testo normale":          "RESET_FORMAT",
+    "interruzione pagina":    "PAGE_BREAK",
+    "salto pagina":           "PAGE_BREAK",
+    "allinea sinistra":       "ALIGN_LEFT",
+    "allinea centro":         "ALIGN_CENTER",
+    "allinea destra":         "ALIGN_RIGHT",
+    "giustifica":             "ALIGN_JUSTIFY",
+    "giustificato":           "ALIGN_JUSTIFY",
+    "stampa":                 "PRINT",
+    "aumenta font":           "FONT_UP",
+    "ingrandisci font":       "FONT_UP",
+    "diminuisci font":        "FONT_DOWN",
+    "riduci font":            "FONT_DOWN",
 }
 
 _COMMANDS_EN = {
@@ -167,7 +188,20 @@ _COMMANDS_EN = {
     "capital":          "NEXT_CAPITAL",
     "delete last":      "UNDO_LAST",
     "scratch that":     "UNDO_LAST",
+    "redo":             "REDO_LAST",
     "normal text":      "RESET_FORMAT",
+    "page break":       "PAGE_BREAK",
+    "insert page break": "PAGE_BREAK",
+    "align left":       "ALIGN_LEFT",
+    "align center":     "ALIGN_CENTER",
+    "align right":      "ALIGN_RIGHT",
+    "justify":          "ALIGN_JUSTIFY",
+    "justified":        "ALIGN_JUSTIFY",
+    "print":            "PRINT",
+    "increase font":    "FONT_UP",
+    "bigger font":      "FONT_UP",
+    "decrease font":    "FONT_DOWN",
+    "smaller font":     "FONT_DOWN",
 }
 
 if LANG == "en":
@@ -177,13 +211,20 @@ else:
 # Longest command phrase in words (for the greedy match).
 _MAX_FRASE_CMD = max(len(f.split()) for f in _COMANDI)
 
+# Default font step (points) for FONT_UP/FONT_DOWN when no number is spoken.
+FONT_STEP_DEFAULT = 4
 
-def _segmenta_comandi(testo):
+
+def _segmenta_comandi(testo, cmd_map, max_frase):
     """Split raw Vosk text into ordered segments, preserving the order in which
     commands and dictated words were spoken inside a single utterance.
 
+    `cmd_map` is the active phrase->code table (loaded from config) and
+    `max_frase` its longest phrase in words.
+
     Returns a list of (kind, payload):
-      ("CMD",  action_code)   a recognized command phrase
+      ("CMD",  action_code)   a recognized command phrase. For FONT_UP/FONT_DOWN
+                              an amount may be appended as "FONT_UP:5".
       ("TEXT", "raw words")   a run of plain words to dictate
 
     Matching is greedy from the longest phrase, so "tutto maiuscolo" wins over
@@ -196,15 +237,26 @@ def _segmenta_comandi(testo):
     n = len(tokens)
     while i < n:
         trovato = False
-        for k in range(min(_MAX_FRASE_CMD, n - i), 0, -1):
+        for k in range(min(max_frase, n - i), 0, -1):
             frase = " ".join(tokens[i:i + k])
-            code = _COMANDI.get(frase)
+            code = cmd_map.get(frase)
             if code is not None:
                 if buf:
                     segmenti.append(("TEXT", " ".join(buf)))
                     buf = []
+                consumati = k
+                # Font commands may take a trailing spoken number as argument
+                # ("aumenta font cinque"): consume it and attach as "CODE:N".
+                if code in ("FONT_UP", "FONT_DOWN") and trasformazione is not None:
+                    try:
+                        val, nn = trasformazione._leggi_numero(tokens, i + k)
+                    except Exception:
+                        val, nn = None, 0
+                    if val is not None and nn > 0:
+                        code = "%s:%d" % (code, val)
+                        consumati += nn
                 segmenti.append(("CMD", code))
-                i += k
+                i += consumati
                 trovato = True
                 break
         if not trovato:
@@ -514,25 +566,35 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         #     (diagnostic for the command layer); default OFF, zero overhead off.
         self._numeri_on = True
         self._punteggiatura_on = True
+        self._comandi_on = True
         self._verbose = False
         self._debug = True
         self._verbose_logging = False
+        # Active phrase tables (loaded from config, so the user can edit them).
+        # Default to the built-in tables; _carica_config overrides if present.
+        self._cmd_map = dict(_COMANDI)
+        self._punct_map = self._default_punct()
+        self._max_frase_cmd = _MAX_FRASE_CMD
         # Transient formatting state for the voice commands. Per session, NOT
-        # persisted: bold/italic/underline runs, voice caps lock, and the
-        # one-shot "capitalize next word" flag.
+        # persisted: bold/italic/underline runs, voice caps lock, the one-shot
+        # "capitalize next word" flag, and an absolute font height (None = use
+        # the document default).
         self._bold = False
         self._italic = False
         self._underline = False
         self._caps_lock = False
         self._next_capital = False
+        self._font_height = None
         self._carica_config()
-        # Materializza il file di config con i default se non esiste ancora, cosi'
-        # l'utente ha un file da editare (verbose/debug/verbose-logging).
-        if not os.path.exists(CONFIG_PATH):
+        # Materializza il file di config con i default se non esiste ancora, o se
+        # un config pre-esistente non contiene ancora i dizionari editabili
+        # (comandi_map/punteggiatura_map): cosi' l'utente ha sempre un file
+        # completo da editare (toggle + verbose/debug/verbose-logging + mappe).
+        if not os.path.exists(CONFIG_PATH) or self._config_da_aggiornare:
             self._salva_config()
-        log("DettaturaHandler creato (numeri=%s punteggiatura=%s verbose=%s debug=%s verbose-logging=%s)"
-            % (self._numeri_on, self._punteggiatura_on, self._verbose,
-               self._debug, self._verbose_logging))
+        log("DettaturaHandler creato (numeri=%s punteggiatura=%s comandi=%s verbose=%s debug=%s verbose-logging=%s)"
+            % (self._numeri_on, self._punteggiatura_on, self._comandi_on,
+               self._verbose, self._debug, self._verbose_logging))
 
     # --- XInitialization ---------------------------------------------------
     def initialize(self, args):
@@ -567,13 +629,15 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         if not comp.startswith(PROTOCOL):
             return
         # L'azione e' la parte dopo il protocollo: toggle | togglenumbers |
-        # togglepunct.
+        # togglepunct | togglecommands.
         azione = comp[len(PROTOCOL):]
         try:
             if azione == "togglenumbers":
                 self._toggle_numeri()
             elif azione == "togglepunct":
                 self._toggle_punteggiatura()
+            elif azione == "togglecommands":
+                self._toggle_comandi()
             else:  # "toggle"
                 self._toggle()
         except Exception:
@@ -613,10 +677,14 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
                 "Fermala prima di iniziare qui.")
             log("START rifiutato: lock occupato")
             return
+        # Re-read the config so edits to the toggles or the command/punctuation
+        # maps take effect on the next dictation without restarting LibreOffice.
+        self._carica_config()
         # Fresh session: clear any leftover formatting/case state so a new
-        # dictation never inherits bold/caps from a previous run.
+        # dictation never inherits bold/caps/font from a previous run.
         self._bold = self._italic = self._underline = False
         self._caps_lock = self._next_capital = False
+        self._font_height = None
         log("START (modello: %s)" % self._percorso_modello())
         self.motore.avvia()
         self._imposta_icona(True)
@@ -659,34 +727,83 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             self._info("Punteggiatura: %s"
                        % ("ATTIVA" if self._punteggiatura_on else "DISATTIVA"))
 
+    def _toggle_comandi(self):
+        self._comandi_on = not self._comandi_on
+        log("toggle comandi -> %s" % self._comandi_on)
+        self._salva_config()
+        self._broadcast()
+        if LANG == "en":
+            self._info("Formatting commands: %s"
+                       % ("ON" if self._comandi_on else "OFF"))
+        else:
+            self._info("Comandi formattazione: %s"
+                       % ("ATTIVI" if self._comandi_on else "DISATTIVI"))
+
+    def _default_punct(self):
+        """Built-in punctuation table for this build's language (used as the
+        default to materialize into the config)."""
+        if trasformazione is None:
+            return {}
+        return dict(trasformazione._PUNTEGGIATURA)
+
     def _post(self, testo):
-        """Applica punteggiatura + numeri al testo Vosk secondo i toggle. In caso
-        di errore (o modulo assente) ritorna il testo grezzo."""
+        """Applica punteggiatura + numeri al testo Vosk secondo i toggle, con la
+        tabella di punteggiatura caricata dal config. In caso di errore (o modulo
+        assente) ritorna il testo grezzo."""
         if trasformazione is None:
             return testo
         try:
             return trasformazione.trasforma(
-                testo, numeri=self._numeri_on, punteggiatura=self._punteggiatura_on)
+                testo, numeri=self._numeri_on,
+                punteggiatura=self._punteggiatura_on, tabella=self._punct_map)
         except Exception:
             log("trasformazione fallita:\n" + traceback.format_exc())
             return testo
 
-    # --- Persistenza stato (toggle + verbose/debug) -----------------------
+    # --- Persistenza stato (toggle + verbose/debug + mappe) ---------------
     def _carica_config(self):
+        # Set when a pre-existing config lacks the editable maps, so __init__
+        # can rewrite a complete file.
+        self._config_da_aggiornare = False
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 d = json.load(f)
             self._numeri_on = bool(d.get("numeri", True))
             self._punteggiatura_on = bool(d.get("punteggiatura", True))
+            self._comandi_on = bool(d.get("comandi", True))
             self._verbose = bool(d.get("verbose", False))
             self._debug = bool(d.get("debug", True))
             self._verbose_logging = bool(d.get("verbose-logging", False))
+            if "comandi_map" not in d or "punteggiatura_map" not in d:
+                self._config_da_aggiornare = True
+            # User-editable command map (phrase -> action code). Fall back to the
+            # built-in table when absent/invalid.
+            cmd_map = d.get("comandi_map")
+            if isinstance(cmd_map, dict) and cmd_map:
+                self._cmd_map = {str(k): str(v) for k, v in cmd_map.items()}
+            else:
+                self._cmd_map = dict(_COMANDI)
+            self._max_frase_cmd = max(
+                (len(k.split()) for k in self._cmd_map), default=1)
+            # User-editable punctuation map (phrase -> [char, sp_before, sp_after]).
+            punct_map = d.get("punteggiatura_map")
+            if isinstance(punct_map, dict) and punct_map:
+                self._punct_map = {
+                    str(k): (v[0], bool(v[1]), bool(v[2]))
+                    for k, v in punct_map.items()
+                    if isinstance(v, (list, tuple)) and len(v) == 3}
+            else:
+                self._punct_map = self._default_punct()
         except Exception:
             self._numeri_on = True
             self._punteggiatura_on = True
+            self._comandi_on = True
             self._verbose = False
             self._debug = True
             self._verbose_logging = False
+            self._cmd_map = dict(_COMANDI)
+            self._max_frase_cmd = _MAX_FRASE_CMD
+            self._punct_map = self._default_punct()
 
     def _salva_config(self):
         try:
@@ -694,9 +811,15 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 json.dump({"numeri": self._numeri_on,
                            "punteggiatura": self._punteggiatura_on,
+                           "comandi": self._comandi_on,
                            "verbose": self._verbose,
                            "debug": self._debug,
-                           "verbose-logging": self._verbose_logging}, f, indent=2)
+                           "verbose-logging": self._verbose_logging,
+                           "comandi_map": self._cmd_map,
+                           "punteggiatura_map": {
+                               k: [c, sb, sa]
+                               for k, (c, sb, sa) in self._punct_map.items()},
+                           }, f, indent=2, ensure_ascii=False)
         except Exception:
             log("salva config fallita:\n" + traceback.format_exc())
 
@@ -715,11 +838,16 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             log("[fn] " + msg)
 
     def _inserisci_al_cursore(self, testo):
+        # When the command layer is off, the whole result is plain dictation.
+        if not self._comandi_on:
+            self._scrivi_testo(testo)
+            return
         # A single Vosk result can mix commands and dictation, e.g.
         # "attiva grassetto questo conta disattiva grassetto". Split it into
         # ordered segments and replay them in order: commands change state /
         # fire UNO actions, text runs get post-processed and inserted.
-        for tipo, payload in _segmenta_comandi(testo):
+        for tipo, payload in _segmenta_comandi(testo, self._cmd_map,
+                                               self._max_frase_cmd):
             if tipo == "CMD":
                 self._esegui_comando(payload)
             else:
@@ -743,8 +871,15 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
 
     # --- Voice commands ----------------------------------------------------
     def _esegui_comando(self, code):
-        """Execute one command action code (see the command tables on top)."""
+        """Execute one command action code (see the command tables on top).
+        Font commands may carry an amount as "FONT_UP:5"."""
         self._vlog("comando: %s" % code)
+        # Split an optional ":amount" argument (used by FONT_UP / FONT_DOWN).
+        if ":" in code:
+            code, arg_s = code.split(":", 1)
+            arg = int(arg_s) if arg_s.lstrip("-").isdigit() else 0
+        else:
+            arg = 0
         if code == "BOLD_ON":
             self._bold = True
         elif code == "BOLD_OFF":
@@ -760,6 +895,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         elif code == "RESET_FORMAT":
             self._bold = self._italic = self._underline = False
             self._caps_lock = self._next_capital = False
+            self._font_height = None
         elif code == "CAPSLOCK_ON":
             self._caps_lock = True
         elif code == "CAPSLOCK_OFF":
@@ -774,8 +910,41 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             self._termina_elenco()
         elif code == "UNDO_LAST":
             self._dispatch_uno(".uno:Undo")
+        elif code == "REDO_LAST":
+            self._dispatch_uno(".uno:Redo")
+        elif code == "PAGE_BREAK":
+            self._dispatch_uno(".uno:InsertPagebreak")
+        elif code == "ALIGN_LEFT":
+            self._dispatch_uno(".uno:LeftPara")
+        elif code == "ALIGN_CENTER":
+            self._dispatch_uno(".uno:CenterPara")
+        elif code == "ALIGN_RIGHT":
+            self._dispatch_uno(".uno:RightPara")
+        elif code == "ALIGN_JUSTIFY":
+            self._dispatch_uno(".uno:JustifyPara")
+        elif code == "PRINT":
+            self._dispatch_uno(".uno:Print")
+        elif code == "FONT_UP":
+            self._modifica_font(arg or FONT_STEP_DEFAULT)
+        elif code == "FONT_DOWN":
+            self._modifica_font(-(arg or FONT_STEP_DEFAULT))
         else:
             log("comando sconosciuto: %s" % code)
+
+    def _modifica_font(self, delta):
+        """Grow/shrink the size (points) used for the next dictated text. Starts
+        from the current cursor height the first time, then accumulates. Never
+        goes below 1pt."""
+        base = self._font_height
+        if base is None:
+            try:
+                vc = self.frame.getController().getModel() \
+                    .getCurrentController().getViewCursor()
+                base = float(vc.CharHeight)
+            except Exception:
+                base = 12.0
+        self._font_height = max(1.0, base + delta)
+        self._vlog("font height -> %s" % self._font_height)
 
     def _applica_maiuscole(self, testo):
         """Apply the active case state to a text run: voice caps lock uppercases
@@ -804,6 +973,8 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             cursor.CharWeight = BOLD if self._bold else NORMAL
             cursor.CharPosture = ITALIC if self._italic else SLANT_NONE
             cursor.CharUnderline = SINGLE if self._underline else UL_NONE
+            if self._font_height is not None:
+                cursor.CharHeight = self._font_height
         except Exception:
             log("applica formato fallito:\n" + traceback.format_exc())
 
@@ -842,6 +1013,8 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             return self._numeri_on
         if url_completo.endswith("togglepunct"):
             return self._punteggiatura_on
+        if url_completo.endswith("togglecommands"):
+            return self._comandi_on
         return self._in_ascolto()   # toggle microfono
 
     def _broadcast(self):

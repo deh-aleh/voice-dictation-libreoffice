@@ -23,16 +23,20 @@ piattaforma (le due lingue possono anche coesistere installate insieme).
   [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) §3).
 - 🖱️ **Un pulsante** in toolbar: *Inizia/Ferma Dettatura* (icona microfono che
   cambia colore: verde = pronto, rosso = in ascolto; badge lingua `it`/`en`).
-- 🔘 **Due toggle** nel menu *Dettatura*: *Numeri on/off* e *Punteggiatura
-  on/off*, indipendenti per lingua, stato persistito (un popup conferma il nuovo
-  stato). Disattivando un toggle le relative parole-comando restano testo.
+- 🔘 **Tre toggle** nel menu *Dettatura*: *Numeri on/off*, *Punteggiatura
+  on/off* e *Comandi formattazione on/off*, indipendenti per lingua, stato
+  persistito (un popup conferma il nuovo stato). Disattivando un toggle le
+  relative parole-comando restano testo.
 - ✍️ **Punteggiatura a voce** — *"punto"* → `.`, *"virgola"* → `,`, *"nuovo
   paragrafo"* → a capo doppio, *"apri parentesi"* → `(`, ecc. (vedi tabella sotto).
 - 🔢 **Numeri in cifre** — *"venti tre"* → `23`, *"duemila cinquecento"* → `2500`.
-- 🎛️ **Comandi a voce** — formattazione e liste senza toccare il mouse:
-  *"attiva grassetto"*, *"elenco puntato"*, *"tutto maiuscolo"*, *"cancella
-  ultimo"*, ecc. (vedi tabella sotto). Comandi e dettato si mescolano nella
-  stessa frase.
+- 🎛️ **Comandi a voce** — formattazione, liste, allineamento, dimensione font,
+  stampa, annulla/rifai senza toccare il mouse: *"attiva grassetto"*, *"elenco
+  puntato"*, *"allinea centro"*, *"aumenta font cinque"*, *"cancella ultimo"*,
+  ecc. (vedi tabella sotto). Comandi e dettato si mescolano nella stessa frase.
+- 🛠️ **Dizionari editabili** — comandi e punteggiatura stanno nel file di config
+  per-lingua (`comandi_map`, `punteggiatura_map`): l'utente può rinominare frasi
+  o rimapparle. Rilette a ogni avvio dettatura (nessun riavvio di LibreOffice).
 - 🔁 **Coesistenza it/en** con mutua esclusione: non ascoltano il microfono insieme.
 - ⚡ **UI non bloccante** — l'audio gira in un thread separato.
 
@@ -165,7 +169,11 @@ Due numeri **indipendenti** restano separati: *"venti tre cinquanta quattro"* �
 Frasi-comando riconosciute dentro il parlato (non sono click in toolbar): cambiano
 la formattazione o eseguono un'azione invece di essere scritte. Comandi e dettato
 si possono mescolare nella stessa frase, es. *"attiva grassetto questo conta
-disattiva grassetto"*. La tabella è per-lingua (token `@LANG@`).
+disattiva grassetto"*. Si attivano/disattivano in blocco dal toggle *Comandi
+formattazione* nel menu; quando sono off le parole-comando restano testo normale.
+
+Le frasi sono **editabili** dal file di config (`comandi_map`): le voci qui sotto
+sono i valori di default per lingua.
 
 | Azione | Italiano | English |
 |---|---|---|
@@ -182,12 +190,25 @@ disattiva grassetto"*. La tabella è per-lingua (token `@LANG@`).
 | MAIUSCOLO continuo on | tutto maiuscolo | all caps · caps on |
 | MAIUSCOLO continuo off | fine maiuscolo | caps off · end caps |
 | Annulla ultimo blocco | cancella ultimo | delete last · scratch that |
+| Rifai (redo) | rifai · ripristina | redo |
 | Azzera formattazione | testo normale | normal text |
+| Interruzione di pagina | interruzione pagina · salto pagina | page break · insert page break |
+| Allinea a sinistra | allinea sinistra | align left |
+| Allinea al centro | allinea centro | align center |
+| Allinea a destra | allinea destra | align right |
+| Giustifica | giustifica · giustificato | justify · justified |
+| Stampa (apre dialogo) | stampa | print |
+| Ingrandisci font (di N, default 4) | aumenta font · ingrandisci font | increase font · bigger font |
+| Riduci font (di N, default 4) | diminuisci font · riduci font | decrease font · smaller font |
+
+Per il font puoi dire la quantità: *"aumenta font cinque"* → +5pt; senza numero
+applica il passo di default (4pt). Vale per il **testo successivo** dettato.
 
 > Tabelle e logica in [`src/dettatura.py`](src/dettatura.py) (`_COMMANDS_IT` /
-> `_COMMANDS_EN`, `_segmenta_comandi`). Formattazione carattere applicata sul view
-> cursor; liste e annulla via comandi UNO (`.uno:DefaultBullet`,
-> `.uno:DefaultNumbering`, `.uno:Undo`).
+> `_COMMANDS_EN`, `_segmenta_comandi`, `_esegui_comando`). Grassetto/corsivo/
+> sottolineato/dimensione applicati sul view cursor; liste, allineamento, stampa,
+> annulla/rifai, interruzione pagina via comandi UNO (`.uno:DefaultBullet`,
+> `.uno:CenterPara`, `.uno:Print`, `.uno:Undo`, `.uno:InsertPagebreak`, ...).
 
 ---
 
@@ -211,11 +232,15 @@ Cosa fa il programma passo per passo: [docs/STORICO.md](docs/STORICO.md).
 
 I log stanno nella cartella condivisa `<tmp>/voice-dictation-logs/`, un file per
 lingua (`voice_dictation_it.log`, `voice_dictation_en.log`); aprila a mano. Nella
-stessa cartella c'è il config per-lingua `voice_dictation_<lang>.cfg.json` con i
-flag `verbose` (popup info, default `false`), `debug` (popup errore, default
-`true`) e `verbose-logging` (logga ogni comando vocale eseguito e i cambi di
-stato formato/maiuscole, default `false`; utile per capire se un comando non
+stessa cartella c'è il config per-lingua `voice_dictation_<lang>.cfg.json`.
+Flag booleani: `numeri`, `punteggiatura`, `comandi` (riconoscimento comandi
+formattazione), `verbose` (popup info, default `false`), `debug` (popup errore,
+default `true`) e `verbose-logging` (logga ogni comando vocale eseguito e i cambi
+di stato formato/maiuscole, default `false`; utile per capire se un comando non
 riconosciuto è stato sentito male da Vosk o non matchato dal parser).
+Dizionari editabili: `comandi_map` (frase → codice azione) e `punteggiatura_map`
+(frase → `[carattere, spazio_prima, spazio_dopo]`). Il file viene riletto a ogni
+avvio dettatura, quindi le modifiche valgono senza riavviare LibreOffice.
 Causa più comune: **microfono mutato, a volume 0, o permessi**.
 
 - 🪟 [docs/TROUBLESHOOTING_WINDOWS.md](docs/TROUBLESHOOTING_WINDOWS.md)

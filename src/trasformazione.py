@@ -49,40 +49,61 @@ _PUNCT_IT = {
     "chiudi parentesi":     (")",    False, True),
     "apri virgolette":      ("\"",   True,  False),
     "chiudi virgolette":    ("\"",   False, True),
-    "punto":                (". ",    False, True),
+    "punto":                (". ",    False, False),
     "virgola":              (",",    False, True),
     "trattino":             ("-",    False, False),
     "lineetta":             ("—", True, True),   # — (em dash)
     "asterisco":            ("*",    True,  True),
     "barra":                ("/",    False, False),
+    "chiocciola":           ("@",    False, False),
+    "dollari":              ("$",    False, False),
+    "euro":                 ("€",    False, False),
+    "sterline":             ("£",    False, False),
+    "percentuale":          ("%",    False, False),
+    "hashtag":              ("#",    False, False),
+    "puntini di sospensione":            ("...",    False, True),
+    "eccetera":             ("etc. etc. ",    False, True),
+    "ritorna data":         (__import__('datetime').date.today().strftime('%d/%m/%Y'), False, False),
 }
 
 _PUNCT_EN = {
-    "full stop":           (".",    False, True),
-    "period":              (".",    False, True),
-    "comma":               (",",    False, True),
-    "semicolon":           (";",    False, True),
-    "colon":               (":",    False, True),
-    "question mark":       ("?",    False, True),
-    "exclamation mark":    ("!",    False, True),
-    "exclamation point":   ("!",    False, True),
-    "new line":            ("\n",   False, False),
-    "new paragraph":       ("\n\n", False, False),
-    "open parenthesis":    ("(",    True,  False),
-    "open paren":          ("(",    True,  False),
-    "close parenthesis":   (")",    False, True),
-    "close paren":         (")",    False, True),
-    "open quote":          ("\"",   True,  False),
-    "open quotes":         ("\"",   True,  False),
-    "close quote":         ("\"",   False, True),
-    "close quotes":        ("\"",   False, True),
-    "hyphen":              ("-",    False, False),
-    "dash":                ("—", True, True),
-    "em dash":             ("—", True, True),
-    "asterisk":            ("*",    True,  True),
-    "slash":               ("/",    False, False),
+    "full stop":            (".",    False, True),
+    "period":               (".",    False, True),
+    "comma":                (",",    False, True),
+    "semicolon":            (";",    False, True),
+    "colon":                (":",    False, True),
+    "question mark":        ("?",    False, True),
+    "exclamation mark":     ("!",    False, True),
+    "exclamation point":    ("!",    False, True),
+    "new line":             ("\n",   False, False),
+    "new paragraph":        ("\n\n", False, False),
+    "open parenthesis":     ("(",    True,  False),
+    "open paren":           ("(",    True,  False),
+    "close parenthesis":    (")",    False, True),
+    "close paren":          (")",    False, True),
+    "open quote":           ("\"",   True,  False),
+    "open quotes":          ("\"",   True,  False),
+    "close quote":          ("\"",   False, True),
+    "close quotes":         ("\"",   False, True),
+    "hyphen":               ("-",    False, False),
+    "dash":                 ("—",    True,  True),
+    "em dash":              ("—",    True,  True),
+    "asterisk":             ("*",    True,  True),
+    "slash":                ("/",    False, False),
+    "at sign":              ("@",    False, False),
+    "dollar sign":          ("$",    False, False),
+    "dollars":              ("$",    False, False),
+    "euro":                 ("€",    False, False),
+    "pound sign":           ("£",    False, False),
+    "pounds":               ("£",    False, False),
+    "percent":              ("%",    False, False),
+    "percentage sign":      ("%",    False, False),
+    "hashtag":              ("#",    False, False),
+    "number sign":          ("#",    False, False),
+    "ellipsis":             ("...",  False, True),
+    "etcetera":             ("etc. etc. ", False, True),
+    "return date":          (__import__('datetime').date.today().strftime('%d/%m/%Y'), False, False),
 }
-
 
 # ---------------------------------------------------------------------------
 # Number atoms (word -> value).
@@ -262,7 +283,7 @@ def _unisci(items):
     return "".join(parti)
 
 
-def trasforma(testo, numeri=True, punteggiatura=True):
+def trasforma(testo, numeri=True, punteggiatura=True, tabella=None):
     """Convert a phrase recognized by Vosk, applying punctuation and numbers.
     Normal words are left untouched with standard spacing.
 
@@ -271,20 +292,26 @@ def trasforma(testo, numeri=True, punteggiatura=True):
         are kept as plain words instead of becoming characters.
       - numeri=False: spoken number sequences ("venti tre") are kept as words
         instead of becoming digits ("23").
+
+    `tabella` lets the caller pass a custom punctuation map (phrase -> (char,
+    space_before, space_after)), e.g. one loaded from the user's config file. If
+    None, the built-in table for this build's language is used.
     """
     if not testo:
         return testo
+    tab = tabella if tabella is not None else _PUNTEGGIATURA
+    max_frase = max((len(f.split()) for f in tab), default=1) if tab else 1
     tokens = testo.split()
     items = []
     i = 0
     n_tok = len(tokens)
     while i < n_tok:
         # 1) punctuation, greedy from the longest phrase.
-        if punteggiatura:
+        if punteggiatura and tab:
             trovato = False
-            for n in range(min(_MAX_FRASE, n_tok - i), 0, -1):
+            for n in range(min(max_frase, n_tok - i), 0, -1):
                 frase = " ".join(tokens[i:i + n])
-                regola = _PUNTEGGIATURA.get(frase)
+                regola = tab.get(frase)
                 if regola is not None:
                     car, sp_prima, sp_dopo = regola
                     items.append((car, sp_prima, sp_dopo))
