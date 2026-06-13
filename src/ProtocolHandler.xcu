@@ -20,5 +20,17 @@
         <value>vnd.libreitalia.dettatura:*</value>
       </prop>
     </node>
+    <!-- Secondo handler, SOLO per "apri cartella log". Nodo (= impl name) e
+         protocollo distinti. Il protocollo "vnd.voicedictation.shared:" e'
+         identico in it ed en (non sostituito da _pack.py): la voce di menu
+         "apri cartella log" ha lo stesso comando nelle due lingue e LibreOffice
+         puo' fonderla in una sola. NB: una sola riga <value> per handler
+         (piu' <value> nella stessa lista sovrascrivono il primo). -->
+    <node oor:name="org.libreitalia.dettaturavocale.shared.ProtocolHandler"
+          oor:op="replace">
+      <prop oor:name="Protocols" oor:type="oor:string-list">
+        <value>vnd.voicedictation.shared:*</value>
+      </prop>
+    </node>
   </node>
 </oor:component-data>

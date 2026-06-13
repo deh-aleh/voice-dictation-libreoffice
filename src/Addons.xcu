@@ -2,12 +2,14 @@
 <!--
   Addons.xcu - Toolbar (solo microfono) + menu a tendina per la dettatura vocale.
 
-  Tutti i comandi usano il protocollo per-lingua "vnd.libreitalia.dettatura:"
+  Comandi mic/toggle: protocollo per-lingua "vnd.libreitalia.dettatura:"
   (instradato da ProtocolHandler.xcu -> dettatura.py):
     :toggle         -> avvia/ferma la dettatura (icona microfono verde<->rosso)
     :togglenumbers  -> attiva/disattiva il riconoscimento dei NUMERI
     :togglepunct    -> attiva/disattiva il riconoscimento della PUNTEGGIATURA
-    :openlog        -> apre la cartella dei log (file separato per lingua)
+  Apri log: protocollo CONDIVISO "vnd.voicedictation.shared:" (identico in it/en):
+    :openlog        -> apre la cartella dei log (file separato per lingua); URL
+                       uguale nelle due lingue -> LibreOffice fonde la voce in una
 
   Toolbar: solo il pulsante microfono. I toggle numeri/punteggiatura e l'apertura
   log stanno nel menu a tendina (sotto "Dettatura"/"Dictation"). Le etichette sono
@@ -80,9 +82,12 @@
               <value>com.sun.star.text.TextDocument</value>
             </prop>
           </node>
+          <!-- URL CONDIVISO (non suffissato per-lingua): identico in it ed en,
+               cosi' nella fusione dei menu add-on LibreOffice puo' deduplicarlo
+               in UNA sola voce "Apri cartella dei log". -->
           <node oor:name="m4" oor:op="replace">
             <prop oor:name="URL" oor:type="xs:string">
-              <value>vnd.libreitalia.dettatura:openlog</value>
+              <value>vnd.voicedictation.shared:openlog</value>
             </prop>
             <prop oor:name="Title" oor:type="xs:string">
               <value xml:lang="it">Apri cartella dei log</value>

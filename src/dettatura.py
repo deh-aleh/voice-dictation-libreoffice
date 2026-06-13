@@ -15,9 +15,11 @@ Feedback visivo:
     toolbar tramite FeatureStateEvent.State (True = in ascolto).
 
 Diagnostica:
-    Tutto viene loggato in <tmp>/dettatura_libreoffice.log, cosi' e' possibile
-    capire se il componente viene caricato e se il click arriva, anche quando la
-    UI non mostra nulla. Percorso tipico: /tmp/dettatura_libreoffice.log
+    Tutto viene loggato in <tmp>/voice-dictation-logs/voice_dictation_<lang>.log
+    (un file per lingua, cartella condivisa), cosi' e' possibile capire se il
+    componente viene caricato e se il click arriva. Il file si azzera oltre ~4 MB.
+    Accanto sta il config per-lingua voice_dictation_<lang>.cfg.json con i flag
+    numeri/punteggiatura (toggle) e verbose/debug (popup info/errore).
 """
 
 import os
@@ -81,6 +83,16 @@ SERVICE_NAMES = ("com.sun.star.frame.ProtocolHandler",)
 PROTOCOL = "vnd.libreitalia.dettatura:"
 EXTENSION_ID = "org.libreitalia.dettaturavocale"
 
+# Secondo handler/protocollo, SOLO per "apri cartella log". Il protocollo
+# "vnd.voicedictation.shared:" NON contiene le stringhe sostituite da _pack.py,
+# quindi e' IDENTICO in tutte le build: la voce di menu "apri cartella log" ha lo
+# stesso comando in it ed en e LibreOffice (che fonde i menu add-on con lo stesso
+# titolo) puo' deduplicarla in UNA voce sola. Registrato con un SECONDO nodo
+# HandlerSet (impl name distinto, suffissato per-lingua), NON come secondo valore
+# nella string-list dei Protocols (quello rompeva la registrazione).
+IMPL_NAME_SHARED = "org.libreitalia.dettaturavocale.shared.ProtocolHandler"
+SHARED_PROTOCOL = "vnd.voicedictation.shared:"
+
 # Codice lingua di QUESTA build (iniettato da _pack.py, token @LANG@). Serve per
 # il nome del file di log e per la persistenza dei toggle. In dev/src resta
 # "@LANG@" e si ripiega su "it".
@@ -97,14 +109,23 @@ BLOCK_SIZE = 8000
 # questa cartella, mostrando i log di tutte le estensioni installate.
 LOG_DIR = os.path.join(tempfile.gettempdir(), "voice-dictation-logs")
 LOG_PATH = os.path.join(LOG_DIR, "voice_dictation_%s.log" % LANG)
-# Stato persistito dei toggle (numeri/punteggiatura), per-lingua, accanto ai log.
+# Stato persistito (toggle + verbose/debug), per-lingua, accanto ai log.
 CONFIG_PATH = os.path.join(LOG_DIR, "voice_dictation_%s.cfg.json" % LANG)
+# Tetto dimensione log: oltre questa soglia il file viene azzerato (evita che
+# cresca all'infinito). ~4 MB.
+LOG_MAX_BYTES = 4 * 1024 * 1024
 
 
 def log(msg):
-    """Scrive una riga timestampata nel file di log (best-effort)."""
+    """Scrive una riga timestampata nel file di log (best-effort).
+    Se il file supera LOG_MAX_BYTES viene azzerato prima di scrivere."""
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
+        try:
+            if os.path.getsize(LOG_PATH) > LOG_MAX_BYTES:
+                open(LOG_PATH, "w").close()
+        except OSError:
+            pass  # file non ancora esistente
         ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         with open(LOG_PATH, "a", encoding="utf-8") as f:
             f.write("[%s] %s\n" % (ts, msg))
@@ -386,13 +407,21 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         self.motore = None
         # Listener della toolbar (per evidenziare il pulsante quando attivo).
         self._listeners = []   # lista di (XStatusListener, URL)
-        # Toggle indipendenti per QUESTA lingua: riconoscimento numeri e
-        # punteggiatura. Default ON (= comportamento storico). Stato persistito.
+        # Stato persistito per QUESTA lingua (file di config indipendente):
+        #   numeri/punteggiatura -> toggle riconoscimento (default ON)
+        #   verbose -> mostra i popup informativi (conferma toggle); default OFF
+        #   debug   -> mostra i popup di errore; default ON
         self._numeri_on = True
         self._punteggiatura_on = True
+        self._verbose = False
+        self._debug = True
         self._carica_config()
-        log("DettaturaHandler creato (numeri=%s punteggiatura=%s)"
-            % (self._numeri_on, self._punteggiatura_on))
+        # Materializza il file di config con i default se non esiste ancora, cosi'
+        # l'utente ha un file da editare (verbose/debug).
+        if not os.path.exists(CONFIG_PATH):
+            self._salva_config()
+        log("DettaturaHandler creato (numeri=%s punteggiatura=%s verbose=%s debug=%s)"
+            % (self._numeri_on, self._punteggiatura_on, self._verbose, self._debug))
 
     # --- XInitialization ---------------------------------------------------
     def initialize(self, args):
@@ -412,7 +441,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
 
     # --- XDispatchProvider -------------------------------------------------
     def queryDispatch(self, url, target_frame_name, search_flags):
-        if url.Complete.startswith(PROTOCOL):
+        if url.Complete.startswith(PROTOCOL) or url.Complete.startswith(SHARED_PROTOCOL):
             return self
         return None
 
@@ -424,11 +453,14 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
     def dispatch(self, url, args):
         log("dispatch: %s" % url.Complete)
         comp = url.Complete
-        if not comp.startswith(PROTOCOL):
+        # "openlog" arriva sul protocollo CONDIVISO (voce di menu unica fra le
+        # lingue); toggle/togglenumbers/togglepunct sul protocollo per-lingua.
+        if comp.startswith(SHARED_PROTOCOL):
+            azione = comp[len(SHARED_PROTOCOL):]
+        elif comp.startswith(PROTOCOL):
+            azione = comp[len(PROTOCOL):]
+        else:
             return
-        # L'azione e' la parte dopo il protocollo: toggle | togglenumbers |
-        # togglepunct | openlog.
-        azione = comp[len(PROTOCOL):]
         try:
             if azione == "openlog":
                 self._apri_cartella_log()
@@ -547,23 +579,29 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             log("trasformazione fallita:\n" + traceback.format_exc())
             return testo
 
-    # --- Persistenza stato toggle -----------------------------------------
+    # --- Persistenza stato (toggle + verbose/debug) -----------------------
     def _carica_config(self):
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 d = json.load(f)
             self._numeri_on = bool(d.get("numeri", True))
             self._punteggiatura_on = bool(d.get("punteggiatura", True))
+            self._verbose = bool(d.get("verbose", False))
+            self._debug = bool(d.get("debug", True))
         except Exception:
             self._numeri_on = True
             self._punteggiatura_on = True
+            self._verbose = False
+            self._debug = True
 
     def _salva_config(self):
         try:
             os.makedirs(LOG_DIR, exist_ok=True)
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 json.dump({"numeri": self._numeri_on,
-                           "punteggiatura": self._punteggiatura_on}, f)
+                           "punteggiatura": self._punteggiatura_on,
+                           "verbose": self._verbose,
+                           "debug": self._debug}, f, indent=2)
         except Exception:
             log("salva config fallita:\n" + traceback.format_exc())
 
@@ -668,8 +706,13 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         self._sostituisci_icona(PROTOCOL + "toggle",
                                 "mic_stop" if in_ascolto else "mic_start")
 
-    # --- Feedback errori ---------------------------------------------------
+    # --- Feedback ----------------------------------------------------------
     def _messaggio(self, msg):
+        """Popup di ERRORE. Mostrato solo se il flag 'debug' e' attivo (default
+        ON). Il messaggio finisce comunque sempre nel file di log."""
+        log("errore: " + msg)
+        if not self._debug:
+            return
         try:
             from com.sun.star.awt.MessageBoxType import ERRORBOX
             toolkit = self.ctx.getServiceManager().createInstanceWithContext(
@@ -681,7 +724,10 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             log("messagebox fallita: " + msg)
 
     def _info(self, msg):
-        """Breve conferma (non errore) dello stato di un toggle."""
+        """Popup INFORMATIVO (conferma toggle). Mostrato solo se il flag
+        'verbose' e' attivo (default OFF)."""
+        if not self._verbose:
+            return
         try:
             from com.sun.star.awt.MessageBoxType import INFOBOX
             toolkit = self.ctx.getServiceManager().createInstanceWithContext(
@@ -697,9 +743,16 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
 # Registrazione del componente (richiesta da pyuno).
 # ===========================================================================
 g_ImplementationHelper = unohelper.ImplementationHelper()
+# Stesso handler sotto DUE impl name: quello per-lingua (toggle/mic) e quello
+# "shared" per il protocollo vnd.voicedictation.shared: (apri cartella log).
 g_ImplementationHelper.addImplementation(
     DettaturaHandler,
     IMPL_NAME,
     SERVICE_NAMES,
 )
-log("componente registrato: %s" % IMPL_NAME)
+g_ImplementationHelper.addImplementation(
+    DettaturaHandler,
+    IMPL_NAME_SHARED,
+    SERVICE_NAMES,
+)
+log("componente registrato: %s + %s" % (IMPL_NAME, IMPL_NAME_SHARED))
