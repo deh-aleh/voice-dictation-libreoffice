@@ -106,6 +106,115 @@ CONFIG_PATH = os.path.join(LOG_DIR, "voice_dictation_%s.cfg.json" % LANG)
 LOG_MAX_BYTES = 4 * 1024 * 1024
 
 
+# ---------------------------------------------------------------------------
+# Voice command tables (formatting / lists / case / undo). These are spoken
+# command phrases recognized by Vosk: they arrive inside the recognized text,
+# NOT as toolbar clicks. Each phrase maps to an internal action code executed
+# by the handler. Like the punctuation table, this is language-specific and the
+# matching is greedy (longest phrase first) over the raw lowercase Vosk tokens,
+# BEFORE punctuation/number transformation.
+#
+# Action codes:
+#   TOGGLE_BULLET_LIST / TOGGLE_NUMBER_LIST  toggle un/ordered list on the para
+#   TERMINATE_LIST                           drop list formatting (plain text)
+#   BOLD_ON/OFF, ITALIC_ON/OFF, UNDERLINE_ON/OFF   character run formatting
+#   NEXT_CAPITAL    capitalize ONLY the first letter of the next dictated word
+#   CAPSLOCK_ON/OFF voice caps lock: everything UPPERCASE until turned off
+#   UNDO_LAST       undo the last inserted block (.uno:Undo)
+#   RESET_FORMAT    clear bold/italic/underline and any active case state
+# ---------------------------------------------------------------------------
+_COMMANDS_IT = {
+    "elenco puntato":         "TOGGLE_BULLET_LIST",
+    "elenco numerato":        "TOGGLE_NUMBER_LIST",
+    "fine elenco":            "TERMINATE_LIST",
+    "attiva grassetto":       "BOLD_ON",
+    "tutto grassetto":        "BOLD_ON",
+    "disattiva grassetto":    "BOLD_OFF",
+    "fine grassetto":         "BOLD_OFF",
+    "attiva corsivo":         "ITALIC_ON",
+    "tutto corsivo":          "ITALIC_ON",
+    "disattiva corsivo":      "ITALIC_OFF",
+    "fine corsivo":           "ITALIC_OFF",
+    "attiva sottolineato":    "UNDERLINE_ON",
+    "disattiva sottolineato": "UNDERLINE_OFF",
+    "tutto maiuscolo":        "CAPSLOCK_ON",
+    "fine maiuscolo":         "CAPSLOCK_OFF",
+    "maiuscolo":              "NEXT_CAPITAL",
+    "cancella ultimo":        "UNDO_LAST",
+    "testo normale":          "RESET_FORMAT",
+}
+
+_COMMANDS_EN = {
+    "bullet list":      "TOGGLE_BULLET_LIST",
+    "bulleted list":    "TOGGLE_BULLET_LIST",
+    "numbered list":    "TOGGLE_NUMBER_LIST",
+    "end list":         "TERMINATE_LIST",
+    "bold on":          "BOLD_ON",
+    "start bold":       "BOLD_ON",
+    "bold off":         "BOLD_OFF",
+    "end bold":         "BOLD_OFF",
+    "italic on":        "ITALIC_ON",
+    "start italic":     "ITALIC_ON",
+    "italic off":       "ITALIC_OFF",
+    "end italic":       "ITALIC_OFF",
+    "underline on":     "UNDERLINE_ON",
+    "underline off":    "UNDERLINE_OFF",
+    "all caps":         "CAPSLOCK_ON",
+    "caps on":          "CAPSLOCK_ON",
+    "caps off":         "CAPSLOCK_OFF",
+    "end caps":         "CAPSLOCK_OFF",
+    "capitalize":       "NEXT_CAPITAL",
+    "capital":          "NEXT_CAPITAL",
+    "delete last":      "UNDO_LAST",
+    "scratch that":     "UNDO_LAST",
+    "normal text":      "RESET_FORMAT",
+}
+
+if LANG == "en":
+    _COMANDI = _COMMANDS_EN
+else:
+    _COMANDI = _COMMANDS_IT
+# Longest command phrase in words (for the greedy match).
+_MAX_FRASE_CMD = max(len(f.split()) for f in _COMANDI)
+
+
+def _segmenta_comandi(testo):
+    """Split raw Vosk text into ordered segments, preserving the order in which
+    commands and dictated words were spoken inside a single utterance.
+
+    Returns a list of (kind, payload):
+      ("CMD",  action_code)   a recognized command phrase
+      ("TEXT", "raw words")   a run of plain words to dictate
+
+    Matching is greedy from the longest phrase, so "tutto maiuscolo" wins over
+    "maiuscolo" and "fine grassetto" is not split into words. Non-command tokens
+    accumulate into TEXT runs."""
+    tokens = testo.split()
+    segmenti = []
+    buf = []
+    i = 0
+    n = len(tokens)
+    while i < n:
+        trovato = False
+        for k in range(min(_MAX_FRASE_CMD, n - i), 0, -1):
+            frase = " ".join(tokens[i:i + k])
+            code = _COMANDI.get(frase)
+            if code is not None:
+                if buf:
+                    segmenti.append(("TEXT", " ".join(buf)))
+                    buf = []
+                segmenti.append(("CMD", code))
+                i += k
+                trovato = True
+                break
+        if not trovato:
+            buf.append(tokens[i])
+            i += 1
+    if buf:
+        segmenti.append(("TEXT", " ".join(buf)))
+    return segmenti
+
+
 def log(msg):
     """Scrive una riga timestampata nel file di log (best-effort).
     Se il file supera LOG_MAX_BYTES viene azzerato prima di scrivere."""
@@ -401,17 +510,29 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         #   numeri/punteggiatura -> toggle riconoscimento (default ON)
         #   verbose -> mostra i popup informativi (conferma toggle); default OFF
         #   debug   -> mostra i popup di errore; default ON
+        #   verbose-logging -> log every executed voice command + state change
+        #     (diagnostic for the command layer); default OFF, zero overhead off.
         self._numeri_on = True
         self._punteggiatura_on = True
         self._verbose = False
         self._debug = True
+        self._verbose_logging = False
+        # Transient formatting state for the voice commands. Per session, NOT
+        # persisted: bold/italic/underline runs, voice caps lock, and the
+        # one-shot "capitalize next word" flag.
+        self._bold = False
+        self._italic = False
+        self._underline = False
+        self._caps_lock = False
+        self._next_capital = False
         self._carica_config()
         # Materializza il file di config con i default se non esiste ancora, cosi'
-        # l'utente ha un file da editare (verbose/debug).
+        # l'utente ha un file da editare (verbose/debug/verbose-logging).
         if not os.path.exists(CONFIG_PATH):
             self._salva_config()
-        log("DettaturaHandler creato (numeri=%s punteggiatura=%s verbose=%s debug=%s)"
-            % (self._numeri_on, self._punteggiatura_on, self._verbose, self._debug))
+        log("DettaturaHandler creato (numeri=%s punteggiatura=%s verbose=%s debug=%s verbose-logging=%s)"
+            % (self._numeri_on, self._punteggiatura_on, self._verbose,
+               self._debug, self._verbose_logging))
 
     # --- XInitialization ---------------------------------------------------
     def initialize(self, args):
@@ -492,6 +613,10 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
                 "Fermala prima di iniziare qui.")
             log("START rifiutato: lock occupato")
             return
+        # Fresh session: clear any leftover formatting/case state so a new
+        # dictation never inherits bold/caps from a previous run.
+        self._bold = self._italic = self._underline = False
+        self._caps_lock = self._next_capital = False
         log("START (modello: %s)" % self._percorso_modello())
         self.motore.avvia()
         self._imposta_icona(True)
@@ -555,11 +680,13 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             self._punteggiatura_on = bool(d.get("punteggiatura", True))
             self._verbose = bool(d.get("verbose", False))
             self._debug = bool(d.get("debug", True))
+            self._verbose_logging = bool(d.get("verbose-logging", False))
         except Exception:
             self._numeri_on = True
             self._punteggiatura_on = True
             self._verbose = False
             self._debug = True
+            self._verbose_logging = False
 
     def _salva_config(self):
         try:
@@ -568,7 +695,8 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
                 json.dump({"numeri": self._numeri_on,
                            "punteggiatura": self._punteggiatura_on,
                            "verbose": self._verbose,
-                           "debug": self._debug}, f, indent=2)
+                           "debug": self._debug,
+                           "verbose-logging": self._verbose_logging}, f, indent=2)
         except Exception:
             log("salva config fallita:\n" + traceback.format_exc())
 
@@ -579,17 +707,126 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         self._imposta_icona(False)
         self._broadcast()
 
+    def _vlog(self, msg):
+        """Diagnostic log for the voice command layer. No-op (single bool test)
+        unless the 'verbose-logging' config flag is on, so it costs nothing in
+        normal use."""
+        if self._verbose_logging:
+            log("[fn] " + msg)
+
     def _inserisci_al_cursore(self, testo):
-        # Trasforma (punteggiatura/numeri secondo i toggle) e aggiunge lo spazio
-        # di separazione, poi inserisce al cursore.
-        testo = self._post(testo) + " "
+        # A single Vosk result can mix commands and dictation, e.g.
+        # "attiva grassetto questo conta disattiva grassetto". Split it into
+        # ordered segments and replay them in order: commands change state /
+        # fire UNO actions, text runs get post-processed and inserted.
+        for tipo, payload in _segmenta_comandi(testo):
+            if tipo == "CMD":
+                self._esegui_comando(payload)
+            else:
+                self._scrivi_testo(payload)
+
+    def _scrivi_testo(self, grezzo):
+        """Post-process a raw text run (punctuation/numbers + case), then insert
+        it at the cursor with the current character formatting applied."""
+        testo = self._applica_maiuscole(self._post(grezzo))
+        if not testo:
+            return
+        testo = testo + " "
         try:
             doc = self.frame.getController().getModel()
             controller = doc.getCurrentController()
             view_cursor = controller.getViewCursor()
+            self._applica_formato(view_cursor)
             doc.getText().insertString(view_cursor, testo, False)
         except Exception:
             log("inserimento fallito:\n" + traceback.format_exc())
+
+    # --- Voice commands ----------------------------------------------------
+    def _esegui_comando(self, code):
+        """Execute one command action code (see the command tables on top)."""
+        self._vlog("comando: %s" % code)
+        if code == "BOLD_ON":
+            self._bold = True
+        elif code == "BOLD_OFF":
+            self._bold = False
+        elif code == "ITALIC_ON":
+            self._italic = True
+        elif code == "ITALIC_OFF":
+            self._italic = False
+        elif code == "UNDERLINE_ON":
+            self._underline = True
+        elif code == "UNDERLINE_OFF":
+            self._underline = False
+        elif code == "RESET_FORMAT":
+            self._bold = self._italic = self._underline = False
+            self._caps_lock = self._next_capital = False
+        elif code == "CAPSLOCK_ON":
+            self._caps_lock = True
+        elif code == "CAPSLOCK_OFF":
+            self._caps_lock = False
+        elif code == "NEXT_CAPITAL":
+            self._next_capital = True
+        elif code == "TOGGLE_BULLET_LIST":
+            self._dispatch_uno(".uno:DefaultBullet")
+        elif code == "TOGGLE_NUMBER_LIST":
+            self._dispatch_uno(".uno:DefaultNumbering")
+        elif code == "TERMINATE_LIST":
+            self._termina_elenco()
+        elif code == "UNDO_LAST":
+            self._dispatch_uno(".uno:Undo")
+        else:
+            log("comando sconosciuto: %s" % code)
+
+    def _applica_maiuscole(self, testo):
+        """Apply the active case state to a text run: voice caps lock uppercases
+        everything; NEXT_CAPITAL capitalizes only the first letter of the next
+        word, then clears itself."""
+        if self._caps_lock:
+            return testo.upper()
+        if self._next_capital and testo:
+            for idx, ch in enumerate(testo):
+                if ch.isalpha():
+                    testo = testo[:idx] + ch.upper() + testo[idx + 1:]
+                    break
+            self._next_capital = False
+            self._vlog("maiuscolo iniziale applicato")
+        return testo
+
+    def _applica_formato(self, cursor):
+        """Set bold/italic/underline character attributes on the (collapsed)
+        view cursor so the text inserted right after inherits them."""
+        try:
+            from com.sun.star.awt.FontWeight import BOLD, NORMAL
+            from com.sun.star.awt.FontSlant import ITALIC
+            from com.sun.star.awt.FontSlant import NONE as SLANT_NONE
+            from com.sun.star.awt.FontUnderline import SINGLE
+            from com.sun.star.awt.FontUnderline import NONE as UL_NONE
+            cursor.CharWeight = BOLD if self._bold else NORMAL
+            cursor.CharPosture = ITALIC if self._italic else SLANT_NONE
+            cursor.CharUnderline = SINGLE if self._underline else UL_NONE
+        except Exception:
+            log("applica formato fallito:\n" + traceback.format_exc())
+
+    def _dispatch_uno(self, comando):
+        """Fire a built-in UNO command (lists, undo) through the DispatchHelper
+        on our frame."""
+        try:
+            smgr = self.ctx.getServiceManager()
+            helper = smgr.createInstanceWithContext(
+                "com.sun.star.frame.DispatchHelper", self.ctx)
+            helper.executeDispatch(self.frame, comando, "", 0, ())
+        except Exception:
+            log("dispatch %s fallito:\n%s" % (comando, traceback.format_exc()))
+
+    def _termina_elenco(self):
+        """Drop list formatting from the current paragraph by clearing its
+        numbering rules (works for both bullet and numbered lists)."""
+        try:
+            doc = self.frame.getController().getModel()
+            view_cursor = doc.getCurrentController().getViewCursor()
+            view_cursor.setPropertyValue("NumberingRules", None)
+        except Exception:
+            log("fine elenco fallito:\n" + traceback.format_exc())
 
     def _percorso_modello(self):
         pip = self.ctx.getByName(

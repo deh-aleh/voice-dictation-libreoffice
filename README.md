@@ -29,6 +29,10 @@ piattaforma (le due lingue possono anche coesistere installate insieme).
 - ✍️ **Punteggiatura a voce** — *"punto"* → `.`, *"virgola"* → `,`, *"nuovo
   paragrafo"* → a capo doppio, *"apri parentesi"* → `(`, ecc. (vedi tabella sotto).
 - 🔢 **Numeri in cifre** — *"venti tre"* → `23`, *"duemila cinquecento"* → `2500`.
+- 🎛️ **Comandi a voce** — formattazione e liste senza toccare il mouse:
+  *"attiva grassetto"*, *"elenco puntato"*, *"tutto maiuscolo"*, *"cancella
+  ultimo"*, ecc. (vedi tabella sotto). Comandi e dettato si mescolano nella
+  stessa frase.
 - 🔁 **Coesistenza it/en** con mutua esclusione: non ascoltano il microfono insieme.
 - ⚡ **UI non bloccante** — l'audio gira in un thread separato.
 
@@ -156,6 +160,35 @@ Due numeri **indipendenti** restano separati: *"venti tre cinquanta quattro"* �
 > e' iniettata a build-time: `scripts/_pack.py` sostituisce il token `@LANG@` con
 > `it`/`en`, cosi' lo stesso modulo serve entrambe le distribuzioni.
 
+### Comandi a voce
+
+Frasi-comando riconosciute dentro il parlato (non sono click in toolbar): cambiano
+la formattazione o eseguono un'azione invece di essere scritte. Comandi e dettato
+si possono mescolare nella stessa frase, es. *"attiva grassetto questo conta
+disattiva grassetto"*. La tabella è per-lingua (token `@LANG@`).
+
+| Azione | Italiano | English |
+|---|---|---|
+| Lista puntata on/off | elenco puntato | bullet list · bulleted list |
+| Lista numerata on/off | elenco numerato | numbered list |
+| Fine lista | fine elenco | end list |
+| Grassetto on | attiva grassetto · tutto grassetto | bold on · start bold |
+| Grassetto off | disattiva grassetto · fine grassetto | bold off · end bold |
+| Corsivo on | attiva corsivo · tutto corsivo | italic on · start italic |
+| Corsivo off | disattiva corsivo · fine corsivo | italic off · end italic |
+| Sottolineato on | attiva sottolineato | underline on |
+| Sottolineato off | disattiva sottolineato | underline off |
+| Maiuscola alla prossima parola | maiuscolo | capitalize · capital |
+| MAIUSCOLO continuo on | tutto maiuscolo | all caps · caps on |
+| MAIUSCOLO continuo off | fine maiuscolo | caps off · end caps |
+| Annulla ultimo blocco | cancella ultimo | delete last · scratch that |
+| Azzera formattazione | testo normale | normal text |
+
+> Tabelle e logica in [`src/dettatura.py`](src/dettatura.py) (`_COMMANDS_IT` /
+> `_COMMANDS_EN`, `_segmenta_comandi`). Formattazione carattere applicata sul view
+> cursor; liste e annulla via comandi UNO (`.uno:DefaultBullet`,
+> `.uno:DefaultNumbering`, `.uno:Undo`).
+
 ---
 
 ## Come funziona (in breve)
@@ -179,8 +212,10 @@ Cosa fa il programma passo per passo: [docs/STORICO.md](docs/STORICO.md).
 I log stanno nella cartella condivisa `<tmp>/voice-dictation-logs/`, un file per
 lingua (`voice_dictation_it.log`, `voice_dictation_en.log`); aprila a mano. Nella
 stessa cartella c'è il config per-lingua `voice_dictation_<lang>.cfg.json` con i
-flag `verbose` (popup info, default `false`) e `debug` (popup errore, default
-`true`).
+flag `verbose` (popup info, default `false`), `debug` (popup errore, default
+`true`) e `verbose-logging` (logga ogni comando vocale eseguito e i cambi di
+stato formato/maiuscole, default `false`; utile per capire se un comando non
+riconosciuto è stato sentito male da Vosk o non matchato dal parser).
 Causa più comune: **microfono mutato, a volume 0, o permessi**.
 
 - 🪟 [docs/TROUBLESHOOTING_WINDOWS.md](docs/TROUBLESHOOTING_WINDOWS.md)

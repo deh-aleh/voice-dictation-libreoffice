@@ -49,7 +49,7 @@ _PUNCT_IT = {
     "chiudi parentesi":     (")",    False, True),
     "apri virgolette":      ("\"",   True,  False),
     "chiudi virgolette":    ("\"",   False, True),
-    "punto":                (".",    False, True),
+    "punto":                (". ",    False, True),
     "virgola":              (",",    False, True),
     "trattino":             ("-",    False, False),
     "lineetta":             ("—", True, True),   # — (em dash)
