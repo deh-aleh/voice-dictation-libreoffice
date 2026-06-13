@@ -176,9 +176,11 @@ Cosa fa il programma passo per passo: [docs/STORICO.md](docs/STORICO.md).
 
 ## Non scrive? Risoluzione problemi
 
-Writer → menu **Dettatura → Apri cartella dei log**: si apre la cartella
-condivisa `voice-dictation-logs/`, con un file per lingua (`voice_dictation_it.log`,
-`voice_dictation_en.log`).
+I log stanno nella cartella condivisa `<tmp>/voice-dictation-logs/`, un file per
+lingua (`voice_dictation_it.log`, `voice_dictation_en.log`); aprila a mano. Nella
+stessa cartella c'è il config per-lingua `voice_dictation_<lang>.cfg.json` con i
+flag `verbose` (popup info, default `false`) e `debug` (popup errore, default
+`true`).
 Causa più comune: **microfono mutato, a volume 0, o permessi**.
 
 - 🪟 [docs/TROUBLESHOOTING_WINDOWS.md](docs/TROUBLESHOOTING_WINDOWS.md)

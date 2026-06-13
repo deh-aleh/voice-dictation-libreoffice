@@ -83,16 +83,6 @@ SERVICE_NAMES = ("com.sun.star.frame.ProtocolHandler",)
 PROTOCOL = "vnd.libreitalia.dettatura:"
 EXTENSION_ID = "org.libreitalia.dettaturavocale"
 
-# Secondo handler/protocollo, SOLO per "apri cartella log". Il protocollo
-# "vnd.voicedictation.shared:" NON contiene le stringhe sostituite da _pack.py,
-# quindi e' IDENTICO in tutte le build: la voce di menu "apri cartella log" ha lo
-# stesso comando in it ed en e LibreOffice (che fonde i menu add-on con lo stesso
-# titolo) puo' deduplicarla in UNA voce sola. Registrato con un SECONDO nodo
-# HandlerSet (impl name distinto, suffissato per-lingua), NON come secondo valore
-# nella string-list dei Protocols (quello rompeva la registrazione).
-IMPL_NAME_SHARED = "org.libreitalia.dettaturavocale.shared.ProtocolHandler"
-SHARED_PROTOCOL = "vnd.voicedictation.shared:"
-
 # Codice lingua di QUESTA build (iniettato da _pack.py, token @LANG@). Serve per
 # il nome del file di log e per la persistenza dei toggle. In dev/src resta
 # "@LANG@" e si ripiega su "it".
@@ -105,8 +95,8 @@ SAMPLE_RATE = 16000
 BLOCK_SIZE = 8000
 
 # Cartella di log CONDIVISA fra le lingue, con un file separato per ciascuna
-# ("voice_dictation_it.log", "voice_dictation_en.log"). "Apri cartella log" apre
-# questa cartella, mostrando i log di tutte le estensioni installate.
+# ("voice_dictation_it.log", "voice_dictation_en.log"). Da aprire a mano (nessuna
+# voce di menu: con it+en LibreOffice non deduplica le voci add-on omonime).
 LOG_DIR = os.path.join(tempfile.gettempdir(), "voice-dictation-logs")
 LOG_PATH = os.path.join(LOG_DIR, "voice_dictation_%s.log" % LANG)
 # Stato persistito (toggle + verbose/debug), per-lingua, accanto ai log.
@@ -441,7 +431,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
 
     # --- XDispatchProvider -------------------------------------------------
     def queryDispatch(self, url, target_frame_name, search_flags):
-        if url.Complete.startswith(PROTOCOL) or url.Complete.startswith(SHARED_PROTOCOL):
+        if url.Complete.startswith(PROTOCOL):
             return self
         return None
 
@@ -453,18 +443,13 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
     def dispatch(self, url, args):
         log("dispatch: %s" % url.Complete)
         comp = url.Complete
-        # "openlog" arriva sul protocollo CONDIVISO (voce di menu unica fra le
-        # lingue); toggle/togglenumbers/togglepunct sul protocollo per-lingua.
-        if comp.startswith(SHARED_PROTOCOL):
-            azione = comp[len(SHARED_PROTOCOL):]
-        elif comp.startswith(PROTOCOL):
-            azione = comp[len(PROTOCOL):]
-        else:
+        if not comp.startswith(PROTOCOL):
             return
+        # L'azione e' la parte dopo il protocollo: toggle | togglenumbers |
+        # togglepunct.
+        azione = comp[len(PROTOCOL):]
         try:
-            if azione == "openlog":
-                self._apri_cartella_log()
-            elif azione == "togglenumbers":
+            if azione == "togglenumbers":
                 self._toggle_numeri()
             elif azione == "togglepunct":
                 self._toggle_punteggiatura()
@@ -474,24 +459,6 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             tb = traceback.format_exc()
             log("ECCEZIONE in dispatch:\n" + tb)
             self._messaggio("Errore:\n" + tb)
-
-    def _apri_cartella_log(self):
-        """Apre la cartella che contiene il file di log nel file manager di sistema."""
-        cartella = os.path.dirname(LOG_PATH)
-        log("apro cartella log: %s" % cartella)
-        try:
-            if sys.platform.startswith("win"):
-                os.startfile(cartella)  # noqa: stesso effetto di doppio click
-            elif sys.platform == "darwin":
-                import subprocess
-                subprocess.Popen(["open", cartella])
-            else:
-                import subprocess
-                subprocess.Popen(["xdg-open", cartella])
-        except Exception:
-            log("apertura cartella fallita:\n" + traceback.format_exc())
-        # In ogni caso mostro all'utente il percorso esatto del log.
-        self._messaggio("Cartella dei log:\n%s\n\nFile di log:\n%s" % (cartella, LOG_PATH))
 
     def addStatusListener(self, listener, url):
         # La toolbar registra qui un listener per conoscere lo stato del comando.
@@ -638,8 +605,6 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             return self._numeri_on
         if url_completo.endswith("togglepunct"):
             return self._punteggiatura_on
-        if url_completo.endswith("openlog"):
-            return False
         return self._in_ascolto()   # toggle microfono
 
     def _broadcast(self):
@@ -743,16 +708,9 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
 # Registrazione del componente (richiesta da pyuno).
 # ===========================================================================
 g_ImplementationHelper = unohelper.ImplementationHelper()
-# Stesso handler sotto DUE impl name: quello per-lingua (toggle/mic) e quello
-# "shared" per il protocollo vnd.voicedictation.shared: (apri cartella log).
 g_ImplementationHelper.addImplementation(
     DettaturaHandler,
     IMPL_NAME,
     SERVICE_NAMES,
 )
-g_ImplementationHelper.addImplementation(
-    DettaturaHandler,
-    IMPL_NAME_SHARED,
-    SERVICE_NAMES,
-)
-log("componente registrato: %s + %s" % (IMPL_NAME, IMPL_NAME_SHARED))
+log("componente registrato: %s" % IMPL_NAME)
