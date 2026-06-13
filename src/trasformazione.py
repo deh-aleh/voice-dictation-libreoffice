@@ -39,22 +39,22 @@ if _LANG not in ("it", "en"):
 # Multi-word phrases go here too: matching is greedy (longest phrase first).
 # ---------------------------------------------------------------------------
 _PUNCT_IT = {
-    "punto e virgola":     (";",    False, True),
-    "punto interrogativo": ("?",    False, True),
-    "punto esclamativo":   ("!",    False, True),
-    "due punti":           (":",    False, True),
-    "nuova linea":         ("\n",   False, False),
-    "nuovo paragrafo":     ("\n\n", False, False),
-    "apri parentesi":      ("(",    True,  False),
-    "chiudi parentesi":    (")",    False, True),
-    "apri virgolette":     ("\"",   True,  False),
-    "chiudi virgolette":   ("\"",   False, True),
-    "punto":               (".",    False, True),
-    "virgola":             (",",    False, True),
-    "trattino":            ("-",    False, False),
-    "lineetta":            ("—", True, True),   # — (em dash)
-    "asterisco":           ("*",    True,  True),
-    "barra":               ("/",    False, False),
+    "punto e virgola":      (";",    False, True),
+    "punto interrogativo":  ("?",    False, True),
+    "punto esclamativo":    ("!",    False, True),
+    "due punti":            (":",    False, True),
+    "a capo":               ("\n",   False, False),
+    "nuovo paragrafo":      ("\n\n", False, False),
+    "apri parentesi":       ("(",    True,  False),
+    "chiudi parentesi":     (")",    False, True),
+    "apri virgolette":      ("\"",   True,  False),
+    "chiudi virgolette":    ("\"",   False, True),
+    "punto":                (".",    False, True),
+    "virgola":              (",",    False, True),
+    "trattino":             ("-",    False, False),
+    "lineetta":             ("—", True, True),   # — (em dash)
+    "asterisco":            ("*",    True,  True),
+    "barra":                ("/",    False, False),
 }
 
 _PUNCT_EN = {
@@ -262,9 +262,16 @@ def _unisci(items):
     return "".join(parti)
 
 
-def trasforma(testo):
+def trasforma(testo, numeri=True, punteggiatura=True):
     """Convert a phrase recognized by Vosk, applying punctuation and numbers.
-    Normal words are left untouched with standard spacing."""
+    Normal words are left untouched with standard spacing.
+
+    The two features are toggled independently by the caller:
+      - punteggiatura=False: punctuation command words ("punto", "comma", ...)
+        are kept as plain words instead of becoming characters.
+      - numeri=False: spoken number sequences ("venti tre") are kept as words
+        instead of becoming digits ("23").
+    """
     if not testo:
         return testo
     tokens = testo.split()
@@ -273,25 +280,27 @@ def trasforma(testo):
     n_tok = len(tokens)
     while i < n_tok:
         # 1) punctuation, greedy from the longest phrase.
-        trovato = False
-        for n in range(min(_MAX_FRASE, n_tok - i), 0, -1):
-            frase = " ".join(tokens[i:i + n])
-            regola = _PUNTEGGIATURA.get(frase)
-            if regola is not None:
-                car, sp_prima, sp_dopo = regola
-                items.append((car, sp_prima, sp_dopo))
-                i += n
-                trovato = True
-                break
-        if trovato:
-            continue
+        if punteggiatura:
+            trovato = False
+            for n in range(min(_MAX_FRASE, n_tok - i), 0, -1):
+                frase = " ".join(tokens[i:i + n])
+                regola = _PUNTEGGIATURA.get(frase)
+                if regola is not None:
+                    car, sp_prima, sp_dopo = regola
+                    items.append((car, sp_prima, sp_dopo))
+                    i += n
+                    trovato = True
+                    break
+            if trovato:
+                continue
 
         # 2) number: consume exactly one number (adjacent numbers stay split).
-        valore, consumati = _leggi_numero(tokens, i)
-        if consumati > 0:
-            items.append((str(valore), True, True))
-            i += consumati
-            continue
+        if numeri:
+            valore, consumati = _leggi_numero(tokens, i)
+            if consumati > 0:
+                items.append((str(valore), True, True))
+                i += consumati
+                continue
 
         # 3) plain word.
         items.append((tokens[i], True, True))

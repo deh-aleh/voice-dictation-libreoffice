@@ -51,10 +51,25 @@ if _SELFDIR not in sys.path:
 from com.sun.star.frame import XDispatchProvider, XDispatch
 from com.sun.star.lang import XServiceInfo, XInitialization
 
-# Post-elaborazione testo (punteggiatura + numeri). Import difensivo: se manca,
-# si inserisce il testo grezzo invece di rompere il caricamento del componente.
+# Post-elaborazione testo (punteggiatura + numeri). Caricamento ROBUSTO per
+# percorso file esplicito invece di "import trasformazione".
+#
+# LibreOffice usa UN solo interprete Python per tutto il processo soffice
+# (quickstarter incluso), condiviso fra estensioni e fra sessioni. Un import per
+# nome resta in sys.modules per l'intera vita del processo: dopo un aggiornamento
+# dell'estensione SENZA riavvio completo di LibreOffice continuerebbe a restituire
+# il modulo VECCHIO (sintomo: "come N versioni fa", punteggiatura e numeri di una
+# build precedente). Inoltre le estensioni it/en spediscono entrambe un modulo
+# omonimo "trasformazione": vincerebbe quella caricata per prima. Caricando il
+# file fisico accanto a noi via importlib (con nome univoco per lingua e senza
+# affidarci alla cache di sys.modules) eseguiamo SEMPRE la copia appena
+# installata, senza collisioni di nome ne' cache obsolete.
 try:
-    import trasformazione
+    import importlib.util as _ilu
+    _tmod_path = os.path.join(_SELFDIR, "trasformazione.py")
+    _tspec = _ilu.spec_from_file_location("trasformazione_@LANG@", _tmod_path)
+    trasformazione = _ilu.module_from_spec(_tspec)
+    _tspec.loader.exec_module(trasformazione)
 except Exception:
     trasformazione = None
 
@@ -66,17 +81,38 @@ SERVICE_NAMES = ("com.sun.star.frame.ProtocolHandler",)
 PROTOCOL = "vnd.libreitalia.dettatura:"
 EXTENSION_ID = "org.libreitalia.dettaturavocale"
 
+# Protocollo CONDIVISO fra le estensioni di lingua diversa. NON contiene le
+# stringhe sostituite da _pack.py (vnd.libreitalia.dettatura / dettaturavocale),
+# quindi resta IDENTICO in tutte le build. Cosi' la voce di menu "apri cartella
+# log" e' UNA SOLA anche con it+en installate insieme (vedi Addons.xcu): entrambe
+# le estensioni registrano questo stesso protocollo e lo stesso nodo di menu, che
+# LibreOffice fonde in un'unica voce.
+SHARED_PROTOCOL = "vnd.voicedictation.shared:"
+
+# Codice lingua di QUESTA build (iniettato da _pack.py, token @LANG@). Serve per
+# il nome del file di log e per la persistenza dei toggle. In dev/src resta
+# "@LANG@" e si ripiega su "it".
+LANG = "@LANG@"
+if LANG not in ("it", "en"):
+    LANG = "it"
+
 # Parametri audio richiesti dai modelli Vosk (mono, 16 kHz, PCM 16-bit).
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 8000
 
-# File di log per la diagnostica.
-LOG_PATH = os.path.join(tempfile.gettempdir(), "dettatura_libreoffice.log")
+# Cartella di log CONDIVISA fra le lingue, con un file separato per ciascuna
+# ("voice_dictation_it.log", "voice_dictation_en.log"). "Apri cartella log" apre
+# questa cartella, mostrando i log di tutte le estensioni installate.
+LOG_DIR = os.path.join(tempfile.gettempdir(), "voice-dictation-logs")
+LOG_PATH = os.path.join(LOG_DIR, "voice_dictation_%s.log" % LANG)
+# Stato persistito dei toggle (numeri/punteggiatura), per-lingua, accanto ai log.
+CONFIG_PATH = os.path.join(LOG_DIR, "voice_dictation_%s.cfg.json" % LANG)
 
 
 def log(msg):
     """Scrive una riga timestampata nel file di log (best-effort)."""
     try:
+        os.makedirs(LOG_DIR, exist_ok=True)
         ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         with open(LOG_PATH, "a", encoding="utf-8") as f:
             f.write("[%s] %s\n" % (ts, msg))
@@ -223,18 +259,6 @@ def _diagnostica_ambiente():
         log("diagnostica fallita:\n" + traceback.format_exc())
 
 
-def _post(testo):
-    """Applica punteggiatura + numeri al testo Vosk. Best-effort: in caso di
-    errore (o modulo assente) ritorna il testo grezzo."""
-    if trasformazione is None:
-        return testo
-    try:
-        return trasformazione.trasforma(testo)
-    except Exception:
-        log("trasformazione fallita:\n" + traceback.format_exc())
-        return testo
-
-
 # ===========================================================================
 # Motore di riconoscimento: Vosk + acquisizione audio nel suo thread.
 # ===========================================================================
@@ -339,13 +363,13 @@ class MotoreDettatura:
                         testo = json.loads(recognizer.Result()).get("text", "")
                         if testo:
                             log("riconosciuto: %r" % testo)
-                            self._inserisci_testo(_post(testo) + " ")
+                            self._inserisci_testo(testo)
 
                 finale = json.loads(recognizer.FinalResult()).get("text", "")
                 log("fine ascolto: blocchi=%d livello_max=%d finale=%r"
                     % (blocchi, livello_max, finale))
                 if finale:
-                    self._inserisci_testo(_post(finale) + " ")
+                    self._inserisci_testo(finale)
             log("ascolto fermato")
 
         except Exception:
@@ -370,13 +394,26 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         self.motore = None
         # Listener della toolbar (per evidenziare il pulsante quando attivo).
         self._listeners = []   # lista di (XStatusListener, URL)
-        log("DettaturaHandler creato")
+        # Toggle indipendenti per QUESTA lingua: riconoscimento numeri e
+        # punteggiatura. Default ON (= comportamento storico). Stato persistito.
+        self._numeri_on = True
+        self._punteggiatura_on = True
+        self._carica_config()
+        log("DettaturaHandler creato (numeri=%s punteggiatura=%s)"
+            % (self._numeri_on, self._punteggiatura_on))
 
     # --- XInitialization ---------------------------------------------------
     def initialize(self, args):
         if args:
             self.frame = args[0]
         log("initialize: frame=%s" % (self.frame is not None))
+        # Allinea le icone dei toggle allo stato persistito: Addons.xcu registra
+        # l'icona "ON" di default; se un toggle e' OFF, la scambio a runtime.
+        try:
+            self._imposta_icona_toggle("numbers", self._numeri_on)
+            self._imposta_icona_toggle("punct", self._punteggiatura_on)
+        except Exception:
+            log("sync icone toggle fallita:\n" + traceback.format_exc())
 
     # --- XServiceInfo ------------------------------------------------------
     def getImplementationName(self):
@@ -390,7 +427,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
 
     # --- XDispatchProvider -------------------------------------------------
     def queryDispatch(self, url, target_frame_name, search_flags):
-        if url.Complete.startswith(PROTOCOL):
+        if url.Complete.startswith(PROTOCOL) or url.Complete.startswith(SHARED_PROTOCOL):
             return self
         return None
 
@@ -401,13 +438,23 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
     # --- XDispatch ---------------------------------------------------------
     def dispatch(self, url, args):
         log("dispatch: %s" % url.Complete)
-        if not url.Complete.startswith(PROTOCOL):
+        comp = url.Complete
+        # L'azione e' la parte dopo il protocollo. "openlog" arriva sul protocollo
+        # CONDIVISO (voce di menu unica fra le lingue); gli altri sul protocollo
+        # per-lingua.
+        if comp.startswith(SHARED_PROTOCOL):
+            azione = comp[len(SHARED_PROTOCOL):]
+        elif comp.startswith(PROTOCOL):
+            azione = comp[len(PROTOCOL):]
+        else:
             return
-        # L'azione e' la parte dopo il protocollo: toggle | openlog.
-        azione = url.Complete[len(PROTOCOL):]
         try:
             if azione == "openlog":
                 self._apri_cartella_log()
+            elif azione == "togglenumbers":
+                self._toggle_numeri()
+            elif azione == "togglepunct":
+                self._toggle_punteggiatura()
             else:  # "toggle"
                 self._toggle()
         except Exception:
@@ -436,8 +483,8 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
     def addStatusListener(self, listener, url):
         # La toolbar registra qui un listener per conoscere lo stato del comando.
         self._listeners.append((listener, url))
-        # Invia subito lo stato corrente (abilitato, non in ascolto).
-        self._notifica_stato(listener, url, self._in_ascolto())
+        # Invia subito lo stato corrente, specifico per il comando.
+        self._notifica_stato(listener, url, self._stato_per_url(url.Complete))
 
     def removeStatusListener(self, listener, url):
         self._listeners = [(l, u) for (l, u) in self._listeners if l != listener]
@@ -468,7 +515,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         log("START (modello: %s)" % self._percorso_modello())
         self.motore.avvia()
         self._imposta_icona(True)
-        self._broadcast_stato(self._in_ascolto())
+        self._broadcast()
 
     def _ferma_dettatura(self):
         if self.motore is not None and self.motore.in_ascolto:
@@ -476,7 +523,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             self.motore.ferma()
             _rilascia_lock()
         self._imposta_icona(False)
-        self._broadcast_stato(self._in_ascolto())
+        self._broadcast()
 
     def _toggle(self):
         self._assicura_motore()
@@ -485,14 +532,64 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         else:
             self._avvia_dettatura()
 
+    # --- Toggle indipendenti: numeri e punteggiatura ----------------------
+    def _toggle_numeri(self):
+        self._numeri_on = not self._numeri_on
+        log("toggle numeri -> %s" % self._numeri_on)
+        self._salva_config()
+        self._imposta_icona_toggle("numbers", self._numeri_on)
+        self._broadcast()
+
+    def _toggle_punteggiatura(self):
+        self._punteggiatura_on = not self._punteggiatura_on
+        log("toggle punteggiatura -> %s" % self._punteggiatura_on)
+        self._salva_config()
+        self._imposta_icona_toggle("punct", self._punteggiatura_on)
+        self._broadcast()
+
+    def _post(self, testo):
+        """Applica punteggiatura + numeri al testo Vosk secondo i toggle. In caso
+        di errore (o modulo assente) ritorna il testo grezzo."""
+        if trasformazione is None:
+            return testo
+        try:
+            return trasformazione.trasforma(
+                testo, numeri=self._numeri_on, punteggiatura=self._punteggiatura_on)
+        except Exception:
+            log("trasformazione fallita:\n" + traceback.format_exc())
+            return testo
+
+    # --- Persistenza stato toggle -----------------------------------------
+    def _carica_config(self):
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            self._numeri_on = bool(d.get("numeri", True))
+            self._punteggiatura_on = bool(d.get("punteggiatura", True))
+        except Exception:
+            self._numeri_on = True
+            self._punteggiatura_on = True
+
+    def _salva_config(self):
+        try:
+            os.makedirs(LOG_DIR, exist_ok=True)
+            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump({"numeri": self._numeri_on,
+                           "punteggiatura": self._punteggiatura_on}, f)
+        except Exception:
+            log("salva config fallita:\n" + traceback.format_exc())
+
     def _on_motore_stop(self):
         # Chiamato dal thread quando termina: riporta il pulsante a "non attivo".
         log("motore terminato -> aggiorno pulsante a OFF")
         _rilascia_lock()
         self._imposta_icona(False)
-        self._broadcast_stato(False)
+        self._broadcast()
 
     def _inserisci_al_cursore(self, testo):
+        # Trasforma (punteggiatura/numeri secondo i toggle) e aggiunge lo spazio
+        # di separazione, poi inserisce al cursore.
+        testo = self._post(testo) + " "
         try:
             doc = self.frame.getController().getModel()
             controller = doc.getCurrentController()
@@ -508,36 +605,45 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         base_path = unohelper.fileUrlToSystemPath(base_url)
         return os.path.join(base_path, "model")
 
-    # --- Stato pulsante (toggle) ------------------------------------------
-    def _broadcast_stato(self, in_ascolto):
-        """Notifica a tutti i listener della toolbar il nuovo stato premuto."""
-        for listener, url in list(self._listeners):
-            self._notifica_stato(listener, url, in_ascolto)
+    # --- Stato pulsanti (toggle) ------------------------------------------
+    def _stato_per_url(self, url_completo):
+        """Stato 'premuto' del comando associato a questo URL."""
+        if url_completo.endswith("togglenumbers"):
+            return self._numeri_on
+        if url_completo.endswith("togglepunct"):
+            return self._punteggiatura_on
+        if url_completo.endswith("openlog"):
+            return False
+        return self._in_ascolto()   # toggle microfono
 
-    def _notifica_stato(self, listener, url, in_ascolto):
+    def _broadcast(self):
+        """Notifica a ogni listener lo stato del SUO comando (mic o toggle)."""
+        for listener, url in list(self._listeners):
+            self._notifica_stato(listener, url, self._stato_per_url(url.Complete))
+
+    def _notifica_stato(self, listener, url, premuto):
         try:
             ev = uno.createUnoStruct("com.sun.star.frame.FeatureStateEvent")
             ev.FeatureURL = url
             ev.IsEnabled = True
             ev.Requery = False
-            ev.State = bool(in_ascolto)   # True -> pulsante mostrato premuto
+            ev.State = bool(premuto)   # True -> pulsante mostrato premuto
             listener.statusChanged(ev)
         except Exception:
             log("notifica stato fallita:\n" + traceback.format_exc())
 
-    # --- Colore icona: verde (pronto) <-> rosso (in ascolto) --------------
+    # --- Icone a runtime --------------------------------------------------
     def _package_url(self):
         """URL (file://) della cartella dell'estensione installata."""
         pip = self.ctx.getByName(
             "/singletons/com.sun.star.deployment.PackageInformationProvider")
         return pip.getPackageLocation(EXTENSION_ID)
 
-    def _imposta_icona(self, in_ascolto):
-        """Sostituisce a runtime l'icona del comando toggle: rosso se in ascolto,
-        verde se pronto. Usa l'ImageManager del modulo Writer."""
+    def _sostituisci_icona(self, cmd, nome_base):
+        """Sostituisce a runtime l'icona di `cmd` con icons/<nome_base>_16/_26.png
+        tramite l'ImageManager del modulo Writer."""
         try:
             from com.sun.star.beans import PropertyValue
-            nome = "mic_stop" if in_ascolto else "mic_start"
             base = self._package_url()
             smgr = self.ctx.getServiceManager()
             gp = smgr.createInstanceWithContext(
@@ -554,11 +660,10 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             ucm = supplier.getUIConfigurationManager(
                 "com.sun.star.text.TextDocument")
             im = ucm.getImageManager()
-            cmd = PROTOCOL + "toggle"
             # ImageType 0 = piccola (default), 1 = grande (SIZE_LARGE).
-            im.replaceImages(0, (cmd,), (_grafica(nome + "_16.png"),))
+            im.replaceImages(0, (cmd,), (_grafica(nome_base + "_16.png"),))
             try:
-                im.replaceImages(1, (cmd,), (_grafica(nome + "_26.png"),))
+                im.replaceImages(1, (cmd,), (_grafica(nome_base + "_26.png"),))
             except Exception:
                 pass
             try:
@@ -566,9 +671,24 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
                     im.store()
             except Exception:
                 pass
-            log("icona -> %s" % nome)
+            log("icona %s -> %s" % (cmd, nome_base))
         except Exception:
             log("set icona fallita:\n" + traceback.format_exc())
+
+    def _imposta_icona(self, in_ascolto):
+        """Icona microfono: rosso se in ascolto, verde se pronto."""
+        self._sostituisci_icona(PROTOCOL + "toggle",
+                                "mic_stop" if in_ascolto else "mic_start")
+
+    def _imposta_icona_toggle(self, feature, on):
+        """Icona dei toggle numeri/punteggiatura: variante ON o OFF."""
+        if feature == "numbers":
+            cmd = PROTOCOL + "togglenumbers"
+            nome = "num_on" if on else "num_off"
+        else:
+            cmd = PROTOCOL + "togglepunct"
+            nome = "punct_on" if on else "punct_off"
+        self._sostituisci_icona(cmd, nome)
 
     # --- Feedback errori ---------------------------------------------------
     def _messaggio(self, msg):
