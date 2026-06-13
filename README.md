@@ -117,35 +117,41 @@ alla volta.
 ### Punteggiatura a voce
 
 Le parole-comando vengono convertite nel carattere corrispondente, con la
-spaziatura corretta (niente spazio prima di `.` o `)`, ecc.):
+spaziatura corretta (niente spazio prima di `.` o `)`, ecc.). Ogni `.oxt` usa la
+tabella della sua lingua (selezionata a build-time, vedi nota sotto):
 
-| Parola pronunciata | Output | Note |
+| Output | Italiano | English |
 |---|---|---|
-| punto | `.` | |
-| virgola | `,` | |
-| punto e virgola | `;` | |
-| due punti | `:` | |
-| punto interrogativo | `?` | |
-| punto esclamativo | `!` | |
-| nuova linea | a capo | va a capo senza cambiare paragrafo |
-| nuovo paragrafo | a capo doppio | crea un nuovo blocco di testo |
-| apri parentesi | `(` | |
-| chiudi parentesi | `)` | |
-| apri virgolette | `"` | |
-| chiudi virgolette | `"` | |
-| trattino | `-` | unisce le parole (`bianco-nero`) |
-| lineetta | `—` | em dash |
-| asterisco | `*` | |
-| barra | `/` | |
+| `.` | punto | period · full stop |
+| `,` | virgola | comma |
+| `;` | punto e virgola | semicolon |
+| `:` | due punti | colon |
+| `?` | punto interrogativo | question mark |
+| `!` | punto esclamativo | exclamation mark · exclamation point |
+| a capo | nuova linea | new line |
+| a capo doppio | nuovo paragrafo | new paragraph |
+| `(` | apri parentesi | open paren · open parenthesis |
+| `)` | chiudi parentesi | close paren · close parenthesis |
+| `"` | apri/chiudi virgolette | open/close quote(s) |
+| `-` | trattino | hyphen |
+| `—` | lineetta | dash · em dash |
+| `*` | asterisco | asterisk |
+| `/` | barra | slash |
 
 ### Numeri
 
 I numeri dettati a voce diventano cifre: *"venti tre"* → `23`,
 *"duecentotrenta"* → `230`, *"tremila cinquecento"* → `3500`,
-*"due milioni trecento mila"* → `2300000`. Funziona sia con i token separati sia
-con le forme concatenate dell'italiano.
+*"due milioni trecento mila"* → `2300000` (in inglese: *"twenty three"* → `23`,
+*"two thousand five hundred"* → `2500`). Funziona sia con i token separati sia con
+le forme concatenate.
 
-> Mappatura e logica in [`src/trasformazione.py`](src/trasformazione.py).
+Due numeri **indipendenti** restano separati: *"venti tre cinquanta quattro"* →
+`23 54` (**non** `77`).
+
+> Mappatura e logica in [`src/trasformazione.py`](src/trasformazione.py). La lingua
+> e' iniettata a build-time: `scripts/_pack.py` sostituisce il token `@LANG@` con
+> `it`/`en`, cosi' lo stesso modulo serve entrambe le distribuzioni.
 
 ---
 

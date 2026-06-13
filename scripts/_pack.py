@@ -36,6 +36,7 @@ def substitute(stage, lang, lo_platform, ml_it, ml_en):
         "@PLATFORM@": lo_platform,
         "@MODEL_LANG_IT@": ml_it,
         "@MODEL_LANG_EN@": ml_en,
+        "@LANG@": lang,  # trasformazione.py: selects it/en punctuation+number tables
     }
     for root, _dirs, files in os.walk(stage):
         for name in files:
