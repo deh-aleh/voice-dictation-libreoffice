@@ -1,21 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Addons.xcu - Pulsanti toolbar + voci di menu per la dettatura vocale in Writer.
+  Addons.xcu - Toolbar (solo microfono) + menu a tendina per la dettatura vocale.
 
-  Comandi (protocollo per-lingua "vnd.libreitalia.dettatura:", instradato da
-  ProtocolHandler.xcu -> dettatura.py):
+  Tutti i comandi usano il protocollo per-lingua "vnd.libreitalia.dettatura:"
+  (instradato da ProtocolHandler.xcu -> dettatura.py):
     :toggle         -> avvia/ferma la dettatura (icona microfono verde<->rosso)
     :togglenumbers  -> attiva/disattiva il riconoscimento dei NUMERI
     :togglepunct    -> attiva/disattiva il riconoscimento della PUNTEGGIATURA
+    :openlog        -> apre la cartella dei log (file separato per lingua)
 
-  Comando CONDIVISO (protocollo "vnd.voicedictation.shared:", NON sostituito da
-  _pack.py: identico in tutte le build):
-    :openlog        -> apre la cartella dei log (un solo file per lingua)
-  Vivendo in un nodo di menu dal nome CONDIVISO, con it+en installate insieme
-  LibreOffice lo fonde in UNA SOLA voce "Apri cartella log".
-
-  Le etichette sono bilingui (xml:lang it/en): LibreOffice mostra quella della
-  lingua impostata nella sua interfaccia.
+  Toolbar: solo il pulsante microfono. I toggle numeri/punteggiatura e l'apertura
+  log stanno nel menu a tendina (sotto "Dettatura"/"Dictation"). Le etichette sono
+  bilingui (xml:lang it/en): LibreOffice mostra quella della lingua impostata
+  nella sua interfaccia.
 -->
 <oor:component-data xmlns:oor="http://openoffice.org/2001/registry"
                     xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -23,9 +20,8 @@
                     oor:package="org.openoffice.Office">
   <node oor:name="AddonUI">
 
-    <!-- Menu PER-LINGUA: avvio/stop dettatura + i due toggle. Il nome del nodo
-         viene suffissato per-lingua da _pack.py, quindi it ed en hanno il proprio
-         menu indipendente. -->
+    <!-- Menu a tendina (nome di nodo suffissato per-lingua da _pack.py: it ed en
+         hanno il proprio menu indipendente). -->
     <node oor:name="OfficeMenuBar">
       <node oor:name="org.libreitalia.dettaturavocale.menu" oor:op="replace">
         <prop oor:name="Title" oor:type="xs:string">
@@ -84,28 +80,9 @@
               <value>com.sun.star.text.TextDocument</value>
             </prop>
           </node>
-        </node>
-      </node>
-
-      <!-- Menu CONDIVISO: nome di nodo NON suffissato (non contiene le stringhe
-           che _pack.py sostituisce) -> identico in it ed en -> LibreOffice lo
-           fonde in un'unica voce anche con entrambe installate. Contiene solo
-           "Apri cartella log", sul protocollo condiviso. -->
-      <node oor:name="org.voicedictation.shared.logmenu" oor:op="replace">
-        <prop oor:name="Title" oor:type="xs:string">
-          <value xml:lang="it">Dettatura: log</value>
-          <value xml:lang="en">Dictation: log</value>
-        </prop>
-        <prop oor:name="Target" oor:type="xs:string">
-          <value>_self</value>
-        </prop>
-        <prop oor:name="Context" oor:type="xs:string">
-          <value>com.sun.star.text.TextDocument</value>
-        </prop>
-        <node oor:name="Submenu">
-          <node oor:name="s1" oor:op="replace">
+          <node oor:name="m4" oor:op="replace">
             <prop oor:name="URL" oor:type="xs:string">
-              <value>vnd.voicedictation.shared:openlog</value>
+              <value>vnd.libreitalia.dettatura:openlog</value>
             </prop>
             <prop oor:name="Title" oor:type="xs:string">
               <value xml:lang="it">Apri cartella dei log</value>
@@ -122,8 +99,7 @@
       </node>
     </node>
 
-    <!-- Toolbar: pulsante microfono (verde<->rosso a runtime) + i due toggle
-         (icona ON registrata qui; dettatura.py la scambia in OFF a runtime). -->
+    <!-- Toolbar: solo il pulsante microfono (verde<->rosso a runtime). -->
     <node oor:name="OfficeToolBar">
       <node oor:name="org.libreitalia.dettaturavocale.toolbar" oor:op="replace">
         <node oor:name="m1" oor:op="replace">
@@ -141,42 +117,11 @@
             <value>com.sun.star.text.TextDocument</value>
           </prop>
         </node>
-        <node oor:name="m2" oor:op="replace">
-          <prop oor:name="URL" oor:type="xs:string">
-            <value>vnd.libreitalia.dettatura:togglenumbers</value>
-          </prop>
-          <prop oor:name="Title" oor:type="xs:string">
-            <value xml:lang="it">Numeri: attiva/disattiva</value>
-            <value xml:lang="en">Numbers: on/off</value>
-          </prop>
-          <prop oor:name="Target" oor:type="xs:string">
-            <value>_self</value>
-          </prop>
-          <prop oor:name="Context" oor:type="xs:string">
-            <value>com.sun.star.text.TextDocument</value>
-          </prop>
-        </node>
-        <node oor:name="m3" oor:op="replace">
-          <prop oor:name="URL" oor:type="xs:string">
-            <value>vnd.libreitalia.dettatura:togglepunct</value>
-          </prop>
-          <prop oor:name="Title" oor:type="xs:string">
-            <value xml:lang="it">Punteggiatura: attiva/disattiva</value>
-            <value xml:lang="en">Punctuation: on/off</value>
-          </prop>
-          <prop oor:name="Target" oor:type="xs:string">
-            <value>_self</value>
-          </prop>
-          <prop oor:name="Context" oor:type="xs:string">
-            <value>com.sun.star.text.TextDocument</value>
-          </prop>
-        </node>
       </node>
     </node>
 
-    <!-- Icone di default dei comandi. Microfono = verde (pronto). Toggle =
-         variante ON (numeri/punteggiatura attivi di default). dettatura.py le
-         scambia a runtime (rosso / OFF) via XImageManager. -->
+    <!-- Icona di default del microfono: verde (pronto). dettatura.py la scambia
+         in rosso quando la dettatura e' attiva (XImageManager). -->
     <node oor:name="Images">
       <node oor:name="org.libreitalia.dettaturavocale.image.toggle" oor:op="replace">
         <prop oor:name="URL" oor:type="xs:string">
@@ -188,32 +133,6 @@
           </prop>
           <prop oor:name="ImageBigURL" oor:type="xs:string">
             <value>%origin%/icons/mic_start_26.png</value>
-          </prop>
-        </node>
-      </node>
-      <node oor:name="org.libreitalia.dettaturavocale.image.numbers" oor:op="replace">
-        <prop oor:name="URL" oor:type="xs:string">
-          <value>vnd.libreitalia.dettatura:togglenumbers</value>
-        </prop>
-        <node oor:name="UserDefinedImages">
-          <prop oor:name="ImageSmallURL" oor:type="xs:string">
-            <value>%origin%/icons/num_on_16.png</value>
-          </prop>
-          <prop oor:name="ImageBigURL" oor:type="xs:string">
-            <value>%origin%/icons/num_on_26.png</value>
-          </prop>
-        </node>
-      </node>
-      <node oor:name="org.libreitalia.dettaturavocale.image.punct" oor:op="replace">
-        <prop oor:name="URL" oor:type="xs:string">
-          <value>vnd.libreitalia.dettatura:togglepunct</value>
-        </prop>
-        <node oor:name="UserDefinedImages">
-          <prop oor:name="ImageSmallURL" oor:type="xs:string">
-            <value>%origin%/icons/punct_on_16.png</value>
-          </prop>
-          <prop oor:name="ImageBigURL" oor:type="xs:string">
-            <value>%origin%/icons/punct_on_26.png</value>
           </prop>
         </node>
       </node>

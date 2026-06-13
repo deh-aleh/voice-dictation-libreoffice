@@ -81,14 +81,6 @@ SERVICE_NAMES = ("com.sun.star.frame.ProtocolHandler",)
 PROTOCOL = "vnd.libreitalia.dettatura:"
 EXTENSION_ID = "org.libreitalia.dettaturavocale"
 
-# Protocollo CONDIVISO fra le estensioni di lingua diversa. NON contiene le
-# stringhe sostituite da _pack.py (vnd.libreitalia.dettatura / dettaturavocale),
-# quindi resta IDENTICO in tutte le build. Cosi' la voce di menu "apri cartella
-# log" e' UNA SOLA anche con it+en installate insieme (vedi Addons.xcu): entrambe
-# le estensioni registrano questo stesso protocollo e lo stesso nodo di menu, che
-# LibreOffice fonde in un'unica voce.
-SHARED_PROTOCOL = "vnd.voicedictation.shared:"
-
 # Codice lingua di QUESTA build (iniettato da _pack.py, token @LANG@). Serve per
 # il nome del file di log e per la persistenza dei toggle. In dev/src resta
 # "@LANG@" e si ripiega su "it".
@@ -407,13 +399,6 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         if args:
             self.frame = args[0]
         log("initialize: frame=%s" % (self.frame is not None))
-        # Allinea le icone dei toggle allo stato persistito: Addons.xcu registra
-        # l'icona "ON" di default; se un toggle e' OFF, la scambio a runtime.
-        try:
-            self._imposta_icona_toggle("numbers", self._numeri_on)
-            self._imposta_icona_toggle("punct", self._punteggiatura_on)
-        except Exception:
-            log("sync icone toggle fallita:\n" + traceback.format_exc())
 
     # --- XServiceInfo ------------------------------------------------------
     def getImplementationName(self):
@@ -427,7 +412,7 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
 
     # --- XDispatchProvider -------------------------------------------------
     def queryDispatch(self, url, target_frame_name, search_flags):
-        if url.Complete.startswith(PROTOCOL) or url.Complete.startswith(SHARED_PROTOCOL):
+        if url.Complete.startswith(PROTOCOL):
             return self
         return None
 
@@ -439,15 +424,11 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
     def dispatch(self, url, args):
         log("dispatch: %s" % url.Complete)
         comp = url.Complete
-        # L'azione e' la parte dopo il protocollo. "openlog" arriva sul protocollo
-        # CONDIVISO (voce di menu unica fra le lingue); gli altri sul protocollo
-        # per-lingua.
-        if comp.startswith(SHARED_PROTOCOL):
-            azione = comp[len(SHARED_PROTOCOL):]
-        elif comp.startswith(PROTOCOL):
-            azione = comp[len(PROTOCOL):]
-        else:
+        if not comp.startswith(PROTOCOL):
             return
+        # L'azione e' la parte dopo il protocollo: toggle | togglenumbers |
+        # togglepunct | openlog.
+        azione = comp[len(PROTOCOL):]
         try:
             if azione == "openlog":
                 self._apri_cartella_log()
@@ -537,15 +518,22 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         self._numeri_on = not self._numeri_on
         log("toggle numeri -> %s" % self._numeri_on)
         self._salva_config()
-        self._imposta_icona_toggle("numbers", self._numeri_on)
         self._broadcast()
+        if LANG == "en":
+            self._info("Numbers: %s" % ("ON" if self._numeri_on else "OFF"))
+        else:
+            self._info("Numeri: %s" % ("ATTIVI" if self._numeri_on else "DISATTIVI"))
 
     def _toggle_punteggiatura(self):
         self._punteggiatura_on = not self._punteggiatura_on
         log("toggle punteggiatura -> %s" % self._punteggiatura_on)
         self._salva_config()
-        self._imposta_icona_toggle("punct", self._punteggiatura_on)
         self._broadcast()
+        if LANG == "en":
+            self._info("Punctuation: %s" % ("ON" if self._punteggiatura_on else "OFF"))
+        else:
+            self._info("Punteggiatura: %s"
+                       % ("ATTIVA" if self._punteggiatura_on else "DISATTIVA"))
 
     def _post(self, testo):
         """Applica punteggiatura + numeri al testo Vosk secondo i toggle. In caso
@@ -680,16 +668,6 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
         self._sostituisci_icona(PROTOCOL + "toggle",
                                 "mic_stop" if in_ascolto else "mic_start")
 
-    def _imposta_icona_toggle(self, feature, on):
-        """Icona dei toggle numeri/punteggiatura: variante ON o OFF."""
-        if feature == "numbers":
-            cmd = PROTOCOL + "togglenumbers"
-            nome = "num_on" if on else "num_off"
-        else:
-            cmd = PROTOCOL + "togglepunct"
-            nome = "punct_on" if on else "punct_off"
-        self._sostituisci_icona(cmd, nome)
-
     # --- Feedback errori ---------------------------------------------------
     def _messaggio(self, msg):
         try:
@@ -701,6 +679,18 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             box.execute()
         except Exception:
             log("messagebox fallita: " + msg)
+
+    def _info(self, msg):
+        """Breve conferma (non errore) dello stato di un toggle."""
+        try:
+            from com.sun.star.awt.MessageBoxType import INFOBOX
+            toolkit = self.ctx.getServiceManager().createInstanceWithContext(
+                "com.sun.star.awt.Toolkit", self.ctx)
+            parent = self.frame.getContainerWindow() if self.frame else None
+            box = toolkit.createMessageBox(parent, INFOBOX, 1, "Voice Dictation", msg)
+            box.execute()
+        except Exception:
+            log("infobox fallita: " + msg)
 
 
 # ===========================================================================

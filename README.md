@@ -23,9 +23,9 @@ piattaforma (le due lingue possono anche coesistere installate insieme).
   [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) §3).
 - 🖱️ **Un pulsante** in toolbar: *Inizia/Ferma Dettatura* (icona microfono che
   cambia colore: verde = pronto, rosso = in ascolto; badge lingua `it`/`en`).
-- 🔘 **Due toggle** in toolbar (e nel menu): *Numeri on/off* e *Punteggiatura
-  on/off*, indipendenti, stato persistito (icona blu = attivo, grigia barrata =
-  disattivo). Disattivando un toggle le relative parole-comando restano testo.
+- 🔘 **Due toggle** nel menu *Dettatura*: *Numeri on/off* e *Punteggiatura
+  on/off*, indipendenti per lingua, stato persistito (un popup conferma il nuovo
+  stato). Disattivando un toggle le relative parole-comando restano testo.
 - ✍️ **Punteggiatura a voce** — *"punto"* → `.`, *"virgola"* → `,`, *"nuovo
   paragrafo"* → a capo doppio, *"apri parentesi"* → `(`, ecc. (vedi tabella sotto).
 - 🔢 **Numeri in cifre** — *"venti tre"* → `23`, *"duemila cinquecento"* → `2500`.
@@ -176,9 +176,9 @@ Cosa fa il programma passo per passo: [docs/STORICO.md](docs/STORICO.md).
 
 ## Non scrive? Risoluzione problemi
 
-Writer → menu **Dettatura: log → Apri cartella dei log**: si apre la cartella
+Writer → menu **Dettatura → Apri cartella dei log**: si apre la cartella
 condivisa `voice-dictation-logs/`, con un file per lingua (`voice_dictation_it.log`,
-`voice_dictation_en.log`). La voce è UNICA anche con it+en installate insieme.
+`voice_dictation_en.log`).
 Causa più comune: **microfono mutato, a volume 0, o permessi**.
 
 - 🪟 [docs/TROUBLESHOOTING_WINDOWS.md](docs/TROUBLESHOOTING_WINDOWS.md)

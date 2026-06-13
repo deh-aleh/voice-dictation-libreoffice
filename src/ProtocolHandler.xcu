@@ -18,7 +18,6 @@
           oor:op="replace">
       <prop oor:name="Protocols" oor:type="oor:string-list">
         <value>vnd.libreitalia.dettatura:*</value>
-        <value>vnd.voicedictation.shared:*</value>
       </prop>
     </node>
   </node>
