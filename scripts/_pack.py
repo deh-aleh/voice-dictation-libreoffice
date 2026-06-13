@@ -29,14 +29,15 @@ TEXT_EXT = (".xml", ".xcu", ".py")
 SKIP = ("__pycache__", ".DS_Store", "Thumbs.db")
 
 
-def substitute(stage, lang, lo_platform, ml_it, ml_en):
+def substitute(stage, lang, lo_platform, ml_it, ml_en, version):
     repl = {
         "org.libreitalia.dettaturavocale": f"org.libreitalia.dettaturavocale.{lang}",
         "vnd.libreitalia.dettatura:": f"vnd.libreitalia.dettatura.{lang}:",
         "@PLATFORM@": lo_platform,
         "@MODEL_LANG_IT@": ml_it,
         "@MODEL_LANG_EN@": ml_en,
-        "@LANG@": lang,  # trasformazione.py: selects it/en punctuation+number tables
+        "@LANG@": lang,        # trasformazione.py: selects it/en punctuation+number tables
+        "@VERSION@": version,  # description.xml: extension version (from git tag)
     }
     for root, _dirs, files in os.walk(stage):
         for name in files:
@@ -74,8 +75,9 @@ def main():
     ap.add_argument("--lo-platform", required=True)
     ap.add_argument("--model-lang-it", required=True)
     ap.add_argument("--model-lang-en", required=True)
+    ap.add_argument("--version", default="0.0.0-dev")
     a = ap.parse_args()
-    substitute(a.stage, a.lang, a.lo_platform, a.model_lang_it, a.model_lang_en)
+    substitute(a.stage, a.lang, a.lo_platform, a.model_lang_it, a.model_lang_en, a.version)
     make_oxt(a.stage, a.out)
     print(f">> Pacchetto pronto: {a.out}")
 

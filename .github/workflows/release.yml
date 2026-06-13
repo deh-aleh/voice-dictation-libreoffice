@@ -35,7 +35,13 @@ jobs:
 
       - name: Build oxt (it + en)
         shell: bash
+        # On a tag push, VERSION = tag without the leading 'v' (v0.2.5 -> 0.2.5),
+        # injected into description.xml. Manual runs fall back to the dev default.
         run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "Building extension version: ${VERSION:-0.0.0-dev}"
           for L in it en; do
             bash scripts/fetch_model.sh "$L"
             bash scripts/build_oxt.sh "$L" ${{ matrix.platform }}

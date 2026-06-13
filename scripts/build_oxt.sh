@@ -16,6 +16,9 @@ LANG_CODE="${1:?uso: build_oxt.sh <it|en> <platform>}"
 PLATFORM="${2:?uso: build_oxt.sh <it|en> <platform>}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PYBIN="${PYTHON:-python3}"
+# Extension version: injected into description.xml. CI sets VERSION from the git
+# tag (release.yml); local builds get a dev placeholder.
+VERSION="${VERSION:-0.0.0-dev}"
 
 SRC="$ROOT/src"
 DEPS="$ROOT/build/deps"
@@ -75,6 +78,7 @@ echo ">> Sostituzioni (lang=$LANG_CODE, platform=$LO_PLATFORM) + zip"
 "$PYBIN" "$ROOT/scripts/_pack.py" \
     --stage "$STAGE" --out "$OUT" \
     --lang "$LANG_CODE" --lo-platform "$LO_PLATFORM" \
-    --model-lang-it "$ML_IT" --model-lang-en "$ML_EN"
+    --model-lang-it "$ML_IT" --model-lang-en "$ML_EN" \
+    --version "$VERSION"
 
 echo ">> Installa con: Strumenti > Gestione estensioni > Aggiungi"

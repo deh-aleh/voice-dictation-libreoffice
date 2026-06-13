@@ -12,8 +12,9 @@
   <!-- ID univoco del pacchetto. Usato a runtime per localizzare la cartella dell'estensione. -->
   <identifier value="org.libreitalia.dettaturavocale"/>
 
-  <!-- Versione dell'estensione (semver). -->
-  <version value="0.2.3"/>
+  <!-- Versione dell'estensione (semver). Iniettata a build-time dal tag git
+       via scripts/_pack.py (token @VERSION@). Build locale -> 0.0.0-dev. -->
+  <version value="@VERSION@"/>
 
   <!-- Versione minima di LibreOffice (Python 3 + pyuno moderni).
        NB: usare l'elemento LibreOffice-minimal-version, NON
