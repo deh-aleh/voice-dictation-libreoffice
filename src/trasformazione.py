@@ -63,7 +63,6 @@ _PUNCT_IT = {
     "hashtag":              ("#",    False, False),
     "puntini di sospensione":            ("...",    False, True),
     "eccetera":             ("etc. etc. ",    False, True),
-    "ritorna data":         (__import__('datetime').date.today().strftime('%d/%m/%Y'), False, False),
 }
 
 _PUNCT_EN = {
@@ -102,7 +101,6 @@ _PUNCT_EN = {
     "number sign":          ("#",    False, False),
     "ellipsis":             ("...",  False, True),
     "etcetera":             ("etc. etc. ", False, True),
-    "return date":          (__import__('datetime').date.today().strftime('%d/%m/%Y'), False, False),
 }
 
 # ---------------------------------------------------------------------------

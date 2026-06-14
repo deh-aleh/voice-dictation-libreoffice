@@ -129,6 +129,8 @@ LOG_MAX_BYTES = 4 * 1024 * 1024
 #   FONT_UP/FONT_DOWN   grow/shrink the size of the next dictated text. An
 #     optional trailing spoken number sets the amount in points
 #     ("aumenta font cinque" -> +5); with no number a default step is used.
+#   DATE_TODAY      insert today's date, computed at execution time so it is
+#     always the current day (dd/mm/yyyy for it, mm/dd/yyyy for en).
 # ---------------------------------------------------------------------------
 _COMMANDS_IT = {
     "elenco puntato":         "TOGGLE_BULLET_LIST",
@@ -163,6 +165,9 @@ _COMMANDS_IT = {
     "ingrandisci font":       "FONT_UP",
     "diminuisci font":        "FONT_DOWN",
     "riduci font":            "FONT_DOWN",
+    "ritorna data":           "DATE_TODAY",
+    "inserisci data":         "DATE_TODAY",
+    "data odierna":           "DATE_TODAY",
 }
 
 _COMMANDS_EN = {
@@ -202,6 +207,9 @@ _COMMANDS_EN = {
     "bigger font":      "FONT_UP",
     "decrease font":    "FONT_DOWN",
     "smaller font":     "FONT_DOWN",
+    "return date":      "DATE_TODAY",
+    "insert date":      "DATE_TODAY",
+    "current date":     "DATE_TODAY",
 }
 
 if LANG == "en":
@@ -928,8 +936,29 @@ class DettaturaHandler(unohelper.Base, XServiceInfo, XDispatchProvider,
             self._modifica_font(arg or FONT_STEP_DEFAULT)
         elif code == "FONT_DOWN":
             self._modifica_font(-(arg or FONT_STEP_DEFAULT))
+        elif code == "DATE_TODAY":
+            self._inserisci_data()
         else:
             log("comando sconosciuto: %s" % code)
+
+    def _inserisci_data(self):
+        """Insert today's date at the cursor. Computed now via datetime, so it is
+        always the current day (NOT a fixed/hardcoded date)."""
+        fmt = "%m/%d/%Y" if LANG == "en" else "%d/%m/%Y"
+        s = datetime.datetime.now().strftime(fmt)
+        self._vlog("data inserita: %s" % s)
+        self._inserisci_letterale(s + " ")
+
+    def _inserisci_letterale(self, s):
+        """Insert a literal string at the cursor with the current formatting,
+        skipping the punctuation/number transform."""
+        try:
+            doc = self.frame.getController().getModel()
+            vc = doc.getCurrentController().getViewCursor()
+            self._applica_formato(vc)
+            doc.getText().insertString(vc, s, False)
+        except Exception:
+            log("inserimento letterale fallito:\n" + traceback.format_exc())
 
     def _modifica_font(self, delta):
         """Grow/shrink the size (points) used for the next dictated text. Starts

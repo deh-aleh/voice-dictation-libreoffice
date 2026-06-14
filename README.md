@@ -200,6 +200,7 @@ sono i valori di default per lingua.
 | Stampa (apre dialogo) | stampa | print |
 | Ingrandisci font (di N, default 4) | aumenta font · ingrandisci font | increase font · bigger font |
 | Riduci font (di N, default 4) | diminuisci font · riduci font | decrease font · smaller font |
+| Inserisci data odierna (dinamica) | ritorna data · inserisci data · data odierna | return date · insert date · current date |
 
 Per il font puoi dire la quantità: *"aumenta font cinque"* → +5pt; senza numero
 applica il passo di default (4pt). Vale per il **testo successivo** dettato.
