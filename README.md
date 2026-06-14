@@ -129,7 +129,8 @@ alla volta.
 
 Le parole-comando vengono convertite nel carattere corrispondente, con la
 spaziatura corretta (niente spazio prima di `.` o `)`, ecc.). Ogni `.oxt` usa la
-tabella della sua lingua (selezionata a build-time, vedi nota sotto):
+tabella della sua lingua (default sotto), **editabile** dal file di config
+(`punteggiatura_map`):
 
 | Output | Italiano | English |
 |---|---|---|
@@ -139,15 +140,23 @@ tabella della sua lingua (selezionata a build-time, vedi nota sotto):
 | `:` | due punti | colon |
 | `?` | punto interrogativo | question mark |
 | `!` | punto esclamativo | exclamation mark · exclamation point |
-| a capo | nuova linea | new line |
+| a capo | a capo | new line |
 | a capo doppio | nuovo paragrafo | new paragraph |
-| `(` | apri parentesi | open paren · open parenthesis |
-| `)` | chiudi parentesi | close paren · close parenthesis |
+| `(` | apri parentesi | open parenthesis · open paren |
+| `)` | chiudi parentesi | close parenthesis · close paren |
 | `"` | apri/chiudi virgolette | open/close quote(s) |
 | `-` | trattino | hyphen |
 | `—` | lineetta | dash · em dash |
 | `*` | asterisco | asterisk |
 | `/` | barra | slash |
+| `@` | chiocciola | at sign |
+| `$` | dollari | dollar sign · dollars |
+| `€` | euro | euro |
+| `£` | sterline | pound sign · pounds |
+| `%` | percentuale | percent · percentage sign |
+| `#` | hashtag | hashtag · number sign |
+| `...` | puntini di sospensione | ellipsis |
+| `etc. etc.` | eccetera | etcetera |
 
 ### Numeri
 
