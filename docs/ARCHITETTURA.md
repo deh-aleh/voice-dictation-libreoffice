@@ -4,6 +4,8 @@ Documento di riferimento su **come strutturare l'`.oxt` perché LibreOffice cari
 librerie esterne (vosk, sounddevice) dall'interno dell'estensione**, e sulle scelte
 architetturali del progetto.
 
+Per il flusso passo-per-passo vedi [FUNZIONAMENTO.md](FUNZIONAMENTO.md).
+
 ---
 
 ## 1. Anatomia di un `.oxt`
@@ -71,8 +73,19 @@ import sounddevice as sd
 ```
 
 Così, se `pythonpath/` non è ancora popolato (build incompleta), l'estensione si
-carica comunque e l'errore emerge solo all'avvio della dettatura, in modo
-gestito.
+carica comunque e l'errore emerge solo all'avvio della dettatura, in modo gestito.
+
+### Caricamento robusto di `trasformazione.py`
+
+LibreOffice usa **un solo processo Python** per tutta l'applicazione (quickstarter
+incluso). Un `import trasformazione` via nome rimarrebbe in `sys.modules` per l'intera
+vita del processo: dopo un aggiornamento dell'estensione senza riavvio completo
+continuerebbe a restituire il modulo vecchio. Problema ulteriore: it ed en spediscono
+entrambe un modulo omonimo — vincerebbe quella caricata per prima.
+
+Soluzione adottata: `importlib.util.spec_from_file_location` con nome univoco per lingua
+(`trasformazione_it` / `trasformazione_en`). Carica sempre il file fisico accanto al
+componente, senza cache e senza collisioni tra estensioni.
 
 ### Perché non usare `pip` lato utente
 Il Python interno di LibreOffice spesso non espone `pip`, può essere read-only e
@@ -172,9 +185,9 @@ doc.getText().insertString(view_cursor, testo, False)
 ```
 
 > ⚠️ **Nota di robustezza:** UNO non è formalmente thread-safe. Inserire dal thread
-> worker funziona nella pratica per testo breve, ma l'approccio più sicuro è
-> marshalare l'update sul thread principale (es. un `com.sun.star.awt.XCallback` /
-> timer idle). Migliorìa pianificata — vedi [STATO_PROGETTO.md](STATO_PROGETTO.md).
+> worker funziona nella pratica per testo breve (verificato su LibreOffice reale),
+> ma l'approccio più sicuro è marshalare l'update sul thread principale (es. un
+> `com.sun.star.awt.XCallback` / timer idle). Migliorìa prevista in v0.3.
 
 ---
 
