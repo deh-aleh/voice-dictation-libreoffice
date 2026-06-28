@@ -1,229 +1,229 @@
-# Dettatura Vocale per LibreOffice Writer
+# Voice Dictation for LibreOffice Writer
 
-🇬🇧 [Read in English](README_EN.md)
-
----
-
-## Perché l'ho ideata
-
-Ci sono tante persone che non riescono a usare la tastiera come la usiamo noi: magari hanno una disabilità, magari le mani fanno male, magari sono cresciute prima che i computer esistessero e una tastiera è ancora qualcosa di estraneo, o semplicemente vanno di fretta.
-
-Ci sono anche persone che hanno avuto un incidente, o una malattia, e scrivere è diventato doloroso o impossibile.
-
-Volevo dare a queste persone un modo per **parlare** e vedere le parole apparire sullo schermo. Senza configurazioni complicate, senza abbonamenti, senza mandare la propria voce ai server di qualche azienda dall'altra parte del mondo.
-
-Questa estensione ti permette di parlare direttamente dentro LibreOffice Writer. Premi un pulsante, parli, il testo appare. Fine.
-
-E la parte migliore? **Tutto rimane sul tuo computer.** La tua voce non esce mai dalla tua macchina. Non serve internet. Niente account. Niente cloud. Solo tu e il tuo microfono.
+🇮🇹 [Leggi in italiano](README.md)
 
 ---
 
-## Caratteristiche
+## Why I made this
 
-- 🔒 **100% offline** — la tua voce non lascia mai il tuo computer, mai
-- 🌍 **Italiano e Inglese** — un file `.oxt` separato per ogni lingua
-- 🧩 **Tutto incluso** — le dipendenze Python e il modello vocale sono dentro l'`.oxt`, nessuna installazione aggiuntiva necessaria
-- 🖱️ **Un pulsante** — clicca per iniziare, clicca per fermare; l'icona del microfono diventa rossa quando ascolta
-- ✍️ **Punteggiatura a voce** — dici *"punto"* → `.`, *"virgola"* → `,`, *"nuovo paragrafo"* → doppio a capo, e molto altro
-- 🔢 **Numeri in cifre** — dici *"venti tre"* → `23`, *"duemila cinquecento"* → `2500`
-- 🎛️ **Comandi a voce** — grassetto, corsivo, sottolineato, liste, allineamento, dimensione font, stampa, annulla/rifai — tutto con la voce, senza toccare il mouse
-- 🔘 **Toggle indipendenti** — puoi attivare o disattivare numeri, punteggiatura e comandi di formattazione separatamente
-- 🛠️ **Dizionari editabili** — puoi rinominare qualsiasi comando o frase di punteggiatura dal file di config
-- 🔁 **Italiano + Inglese possono coesistere** — installa entrambi, ma solo uno ascolta alla volta
-- ⚡ **Non blocca LibreOffice** — l'audio gira in un thread separato, LibreOffice rimane reattivo
+There are many people who can't use a keyboard the way most of us do: maybe they have a disability, maybe their hands hurt, maybe they grew up before computers existed and a keyboard still feels like something foreign, or maybe they are just always in a hurry.
+
+There are also people who had an accident, or a medical condition, and typing has become painful or impossible.
+
+I wanted to give these people a way to just **talk** and have their words appear on screen. No complicated setup, no subscription, no sending your voice to some company's server in another country.
+
+This extension lets you speak directly into LibreOffice Writer. You press a button, you talk, the text appears. That's it.
+
+And the best part? **Everything stays on your computer.** Your voice never leaves your machine. No internet required. No account. No cloud. Just you and your microphone.
 
 ---
 
-## Installazione (utente finale)
+## Features
 
-1. Vai nella [pagina delle Release](../../releases) e scarica il file `.oxt` per la tua lingua e piattaforma, esempio `voice-dictation-[LINGUA]-[PIATTAFORMA].oxt`.
-2. Apri LibreOffice → **Strumenti → Gestione estensioni → Aggiungi…** → seleziona il file `.oxt`.
-3. Riavvia LibreOffice.
-4. Apri Writer: comparirà il pulsante **Inizia/Ferma Dettatura** nella barra degli strumenti.
-
-Puoi installare la versione italiana e quella inglese insieme. Avrai due pulsanti, ma uno solo può ascoltare alla volta.
-
----
-
-## Come si usa
-
-1. Clicca nel documento dove vuoi scrivere.
-2. Clicca **Inizia Dettatura** e inizia a parlare.
-3. Il testo appare in tempo reale mentre parli.
-4. Clicca di nuovo per fermare.
+- 🔒 **100% offline** — your voice data never leaves your computer, ever
+- 🌍 **Italian and English** — separate `.oxt` file for each language
+- 🧩 **Self-contained** — Python dependencies and the speech model are bundled inside the `.oxt`, no extra installation needed
+- 🖱️ **One button** — click to start, click to stop; the microphone icon turns red when listening
+- ✍️ **Punctuation by voice** — say *"period"* → `.`, *"comma"* → `,`, *"new paragraph"* → double line break, and more
+- 🔢 **Numbers by voice** — say *"twenty three"* → `23`, *"two thousand five hundred"* → `2500`
+- 🎛️ **Formatting commands** — bold, italic, underline, lists, alignment, font size, print, undo/redo — all by voice, no mouse needed
+- 🔘 **Toggles** — you can turn numbers, punctuation, and formatting commands on or off independently
+- 🛠️ **Editable dictionaries** — you can rename any voice command or punctuation phrase from the config file
+- 🔁 **Italian + English can coexist** — install both, but only one listens at a time
+- ⚡ **Non-blocking** — audio runs in a background thread, LibreOffice stays responsive
 
 ---
 
-## Punteggiatura a voce
+## Installation (end user)
 
-Dici queste parole e vengono convertite nel simbolo corrispondente, con la spaziatura corretta (niente spazio prima di `.` o `)`, ecc.).
+1. Go to the [Releases page](../../releases) and download the `.oxt` for your language and platform, for example `voice-dictation-[LANGUAGE]-[PLATFORM].oxt`.
+2. Open LibreOffice → **Tools → Extension Manager → Add…** → select the `.oxt` file.
+3. Restart LibreOffice.
+4. Open Writer: you will see the **Start/Stop Dictation** button in the toolbar.
 
-Puoi modificare la lista completa nel file di config (`punteggiatura_map`).
+You can install the Italian and English versions at the same time. You will have two buttons, but only one can listen at a time.
 
-| Output | Frase in italiano |
+---
+
+## How to use it
+
+1. Click inside the document where you want to write.
+2. Click **Start Dictation** and start talking.
+3. The text appears in real time as you speak.
+4. Click again to stop.
+
+---
+
+## Punctuation by voice
+
+Say these words and they will be converted to the corresponding symbol, with correct spacing (no space before `.` or `)`, etc.).
+
+You can edit the full list in the config file (`punteggiatura_map`).
+
+| Output | English phrase |
 |---|---|
-| `.` | punto |
-| `,` | virgola |
-| `;` | punto e virgola |
-| `:` | due punti |
-| `?` | punto interrogativo |
-| `!` | punto esclamativo |
-| a capo | a capo |
-| doppio a capo | nuovo paragrafo |
-| `(` | apri parentesi |
-| `)` | chiudi parentesi |
-| `"` | apri/chiudi virgolette |
-| `-` | trattino |
-| `—` | lineetta |
-| `*` | asterisco |
-| `/` | barra |
-| `@` | chiocciola |
-| `$` | dollari |
+| `.` | period · full stop |
+| `,` | comma |
+| `;` | semicolon |
+| `:` | colon |
+| `?` | question mark |
+| `!` | exclamation mark · exclamation point |
+| new line | new line |
+| double line break | new paragraph |
+| `(` | open parenthesis · open paren |
+| `)` | close parenthesis · close paren |
+| `"` | open/close quote(s) |
+| `-` | hyphen |
+| `—` | dash · em dash |
+| `*` | asterisk |
+| `/` | slash |
+| `@` | at sign |
+| `$` | dollar sign · dollars |
 | `€` | euro |
-| `£` | sterline |
-| `%` | percentuale |
-| `#` | hashtag |
-| `...` | puntini di sospensione |
-| `etc. etc.` | eccetera |
+| `£` | pound sign · pounds |
+| `%` | percent · percentage sign |
+| `#` | hashtag · number sign |
+| `...` | ellipsis |
+| `etc. etc.` | etcetera |
 
 ---
 
-## Numeri a voce
+## Numbers by voice
 
-I numeri dettati a voce diventano cifre: *"venti tre"* → `23`, *"duecentotrenta"* → `230`, *"tremila cinquecento"* → `3500`, *"due milioni trecento mila"* → `2300000`. Funziona sia con i token separati che con le forme concatenate.
+Spoken numbers become digits: *"twenty three"* → `23`, *"two thousand five hundred"* → `2500`. Works with both separated tokens and concatenated forms.
 
-Due numeri **indipendenti** restano separati: *"venti tre cinquanta quattro"* → `23 54` (**non** `77`).
+Two independent numbers stay separate: *"twenty three fifty four"* → `23 54` (not `77`).
 
 ---
 
-## Comandi di formattazione a voce
+## Formatting commands by voice
 
-Dici queste frasi mentre detti — scatenano un'azione invece di essere scritte. Comandi e testo normale si possono mescolare nella stessa frase, ad esempio *"attiva grassetto questo è importante disattiva grassetto"*.
+Say these phrases while dictating — they trigger an action instead of being typed. Commands and normal text can be mixed in the same sentence, like *"bold on this is important bold off"*.
 
-Puoi attivare o disattivare tutti i comandi con il toggle **Comandi formattazione** nel menu Dettatura. Quando sono off, queste frasi vengono scritte come testo normale.
+You can turn all commands on or off with the **Formatting commands** toggle in the Dictation menu. When off, these phrases are typed as normal text.
 
-La lista completa è editabile nel file di config (`comandi_map`).
+The full list is editable in the config file (`comandi_map`).
 
-| Azione | Frase in italiano |
+| Action | English phrase |
 |---|---|
-| Lista puntata on/off | elenco puntato |
-| Lista numerata on/off | elenco numerato |
-| Fine lista | fine elenco |
-| Grassetto on | attiva grassetto · tutto grassetto |
-| Grassetto off | disattiva grassetto · fine grassetto |
-| Corsivo on | attiva corsivo · tutto corsivo |
-| Corsivo off | disattiva corsivo · fine corsivo |
-| Sottolineato on | attiva sottolineato |
-| Sottolineato off | disattiva sottolineato |
-| Maiuscola sulla prossima parola | maiuscolo |
-| MAIUSCOLO continuo on | tutto maiuscolo |
-| MAIUSCOLO continuo off | fine maiuscolo |
-| Annulla ultimo blocco | cancella ultimo |
-| Rifai (redo) | rifai · ripristina |
-| Azzera formattazione | testo normale |
-| Interruzione di pagina | interruzione pagina · salto pagina |
-| Allinea a sinistra | allinea sinistra |
-| Allinea al centro | allinea centro |
-| Allinea a destra | allinea destra |
-| Giustifica | giustifica · giustificato |
-| Stampa (apre dialogo) | stampa |
-| Ingrandisci font (di N, default 4) | aumenta font · ingrandisci font |
-| Riduci font (di N, default 4) | diminuisci font · riduci font |
-| Inserisci data odierna | ritorna data · inserisci data · data odierna |
+| Bullet list on/off | bullet list · bulleted list |
+| Numbered list on/off | numbered list |
+| End list | end list |
+| Bold on | bold on · start bold |
+| Bold off | bold off · end bold |
+| Italic on | italic on · start italic |
+| Italic off | italic off · end italic |
+| Underline on | underline on |
+| Underline off | underline off |
+| Capitalize next word | capitalize · capital |
+| ALL CAPS on | all caps · caps on |
+| ALL CAPS off | caps off · end caps |
+| Undo last block | delete last · scratch that |
+| Redo | redo |
+| Clear formatting | normal text |
+| Page break | page break · insert page break |
+| Align left | align left |
+| Align center | align center |
+| Align right | align right |
+| Justify | justify · justified |
+| Print (opens dialog) | print |
+| Increase font size (by N, default 4) | increase font · bigger font |
+| Decrease font size (by N, default 4) | decrease font · smaller font |
+| Insert today's date | return date · insert date · current date |
 
-Per il font puoi dire la quantità: *"aumenta font cinque"* → +5pt. Senza numero usa il passo di default (4pt).
+For font size you can say the amount: *"increase font five"* → +5pt. Without a number it uses the default step (4pt).
 
 ---
 
-## Come funziona (in breve)
+## How it works (short version)
 
 ```
-[Click pulsante] --Addons.xcu--> URL "vnd.libreitalia.dettatura.<lang>:toggle"
+[Button click] --Addons.xcu--> URL "vnd.libreitalia.dettatura.<lang>:toggle"
        --ProtocolHandler.xcu--> DettaturaHandler.dispatch() (dettatura.py)
-       --> lockfile: una sola lingua/finestra ascolta alla volta
-       --> thread audio: sounddevice -> Vosk -> testo grezzo
-       --> trasformazione.py: punteggiatura + numeri -> testo finale
-       --> UNO: insertString(view_cursor, testo)
+       --> lockfile: only one language/window listens at a time
+       --> audio thread: sounddevice -> Vosk -> raw text
+       --> trasformazione.py: punctuation + numbers -> final text
+       --> UNO: insertString(view_cursor, text)
 ```
 
-Dettaglio tecnico completo: [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).
+Full technical detail: [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).
 
 ---
 
-## Struttura del progetto
+## Project structure
 
 ```
 dettatura-vocale-libreoffice/
-├── README.md                       # in italiano (questo file)
-├── README_EN.md                    # in inglese
+├── README.md                       # in Italian
+├── README_EN.md                    # in English (this file)
 ├── LICENSE                         # MIT
-├── Makefile                        # build locale: make all LANG=it PLATFORM=linux_x86_64
+├── Makefile                        # local build: make all LANG=en PLATFORM=linux_x86_64
 ├── .github/workflows/
-│   └── release.yml                 # CI: 3 OS × 2 lingue → 6 oxt su tag v*
+│   └── release.yml                 # CI: 3 OS × 2 languages → 6 oxt on tag v*
 ├── docs/
-│   ├── ARCHITETTURA.md             # come LibreOffice carica le librerie native dall'oxt
-│   ├── STATO_PROGETTO.md           # stato attuale / roadmap
-│   └── FUNZIONAMENTO.md             # flusso dalla build al testo, passo per passo
+│   ├── ARCHITETTURA.md             # how LibreOffice loads native libs from the oxt
+│   ├── STATO_PROGETTO.md           # current status / roadmap
+│   └── FUNZIONAMENTO.md             # step-by-step flow from build to text
 ├── scripts/
-│   ├── fetch_deps.sh <plat>        # dipendenze native + _cffi_backend 3.9-3.14 -> build/deps/
-│   ├── fetch_model.sh <lang>       # scarica il modello Vosk -> build/models/<lang>/
+│   ├── fetch_deps.sh <plat>        # native deps + _cffi_backend 3.9-3.14 -> build/deps/
+│   ├── fetch_model.sh <lang>       # downloads Vosk model -> build/models/<lang>/
 │   ├── build_oxt.sh <lang> <plat>  # staging + zip -> dist/voice-dictation-<lang>-<plat>.oxt
-│   └── _pack.py                    # sostituzioni token + zip portabile
-├── build/                          # [generato] dipendenze, modelli, staging (non versionato)
-├── dist/                           # [generato] i file .oxt prodotti (non versionato)
-└── src/                            # <-- diventa la radice dell'archivio .oxt
-    ├── description.xml             # metadati estensione
-    ├── Addons.xcu                  # pulsante toolbar
-    ├── ProtocolHandler.xcu         # instrada il click al componente Python
-    ├── dettatura.py                # componente UNO + motore Vosk + lockfile
-    ├── trasformazione.py           # post-elaborazione: punteggiatura + numeri
+│   └── _pack.py                    # token substitution + portable zip
+├── build/                          # [generated] deps, models, staging (not versioned)
+├── dist/                           # [generated] the .oxt files (not versioned)
+└── src/                            # <-- becomes the root of the .oxt archive
+    ├── description.xml             # extension metadata
+    ├── Addons.xcu                  # toolbar button
+    ├── ProtocolHandler.xcu         # routes button click to Python component
+    ├── dettatura.py                # UNO component + Vosk engine + lockfile
+    ├── trasformazione.py           # post-processing: punctuation + numbers
     ├── META-INF/manifest.xml
-    ├── descriptions/               # testi mostrati nel Gestore Estensioni
-    └── icons/                      # icone microfono (16px, 26px) + icona estensione
+    ├── descriptions/               # text shown in Extension Manager
+    └── icons/                      # microphone icons (16px, 26px) + extension icon
 ```
 
 ---
 
-## Build (per sviluppatori)
+## Build (for developers)
 
-Prerequisiti: `bash`, `python3` + `pip`, `curl`. Non serve `zip`/`unzip` (Python gestisce lo zip per compatibilità cross-platform).
+Requirements: `bash`, `python3` + `pip`, `curl`. No `zip`/`unzip` needed (Python handles the zip for cross-platform compatibility).
 
-### Build locale (una lingua/piattaforma)
+### Local build (one language/platform)
 
 ```bash
-make all LANG=it PLATFORM=linux_x86_64   # -> dist/voice-dictation-it-linux_x86_64.oxt
-make oxt LANG=en                         # riusa dipendenze/modello già scaricati
+make all LANG=en PLATFORM=linux_x86_64   # -> dist/voice-dictation-en-linux_x86_64.oxt
+make oxt LANG=it                         # reuse already downloaded deps/model
 ```
 
-Variabili: `LANG=it|en` (default `it`), `PLATFORM=linux_x86_64|windows_x86_64|macos_aarch64` (default `linux_x86_64`).
+Variables: `LANG=it|en` (default `it`), `PLATFORM=linux_x86_64|windows_x86_64|macos_aarch64` (default `linux_x86_64`).
 
-### Tutte le piattaforme (release, via GitHub Actions)
+### All platforms (release, via GitHub Actions)
 
-Le wheel native vanno costruite su ciascun OS — impossibile da una sola macchina. Ci pensa la CI. Basta un tag:
+Native wheels must be built on each OS — impossible from a single machine. The CI handles this. Just push a tag:
 
 ```bash
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-Il workflow builda su `ubuntu` / `windows` / `macos`, per `it` ed `en`, e allega le **6 oxt** a una GitHub Release.
+The workflow builds on `ubuntu` / `windows` / `macos`, for both `it` and `en`, and attaches the **6 oxt files** to a GitHub Release.
 
 ---
 
-## Non funziona? Risoluzione problemi
+## Something not working?
 
-I log stanno in `<tmp>/voice-dictation-logs/`, un file per lingua (`voice_dictation_it.log`, `voice_dictation_en.log`). Aprili a mano. Il file di config per lingua è lì: `voice_dictation_<lang>.cfg.json`.
+Logs are in `<tmp>/voice-dictation-logs/`, one file per language (`voice_dictation_it.log`, `voice_dictation_en.log`). Open them manually. The config file for each language is also there: `voice_dictation_<lang>.cfg.json`.
 
-Flag di config: `numeri`, `punteggiatura`, `comandi`, `verbose`, `debug`, `verbose-logging`.
+Config flags: `numeri`, `punteggiatura`, `comandi`, `verbose`, `debug`, `verbose-logging`.
 
-Causa più comune di silenzio: **microfono mutato, volume a 0, o permessi mancanti**.
+Most common cause of silence: **microphone muted, volume at 0, or missing permissions**.
 
-- 🪟 [Risoluzione problemi su Windows](docs/TROUBLESHOOTING_WINDOWS.md)
-- 🐧 [Risoluzione problemi su Linux](docs/TROUBLESHOOTING_LINUX.md)
+- 🪟 [Troubleshooting on Windows](docs/TROUBLESHOOTING_WINDOWS.md)
+- 🐧 [Troubleshooting on Linux](docs/TROUBLESHOOTING_LINUX.md)
 
 ---
 
-## Licenza
+## License
 
 [MIT](LICENSE).
 
-Vosk è distribuito sotto licenza Apache 2.0. I modelli acustici hanno licenze proprie — verifica sul sito Vosk prima della ridistribuzione.
+Vosk is distributed under the Apache 2.0 license. Acoustic models have their own licenses — check the Vosk website before redistributing.

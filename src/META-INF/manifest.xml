@@ -11,7 +11,7 @@
   <!-- Componente UNO scritto in Python (il ProtocolHandler che gestisce il click). -->
   <manifest:file-entry
       manifest:media-type="application/vnd.sun.star.uno-component;type=Python"
-      manifest:full-path="dettatura.py"/>
+      manifest:full-path="dictation.py"/>
 
   <!-- Definizione del pulsante in toolbar. -->
   <manifest:file-entry
